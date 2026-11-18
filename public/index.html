@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent World</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="stage" role="img" aria-label="Denah 2D satu lantai gedung berisi ruangan project, fun area, toilet dan lift. Gunakan WASD untuk menggerakkan karakter Anda."></canvas>
+
+<header class="bar">
+  <h1>Agent World <span class="host" id="host"></span></h1>
+  <span class="floorbadge" id="floorBadge"></span>
+  <div class="chips" id="chips"></div>
+  <label class="toggle"><input type="checkbox" id="showSleep" checked> Tampilkan agent tidur</label>
+  <button id="follow" title="Kamera mengikuti karakter Anda (C)">Ikuti karakter</button>
+  <button id="overview" title="Lihat seluruh lantai">Lihat satu lantai</button>
+  <button id="fired" title="Daftar agent yang dipecat (bisa dipulihkan)">Dipecat</button>
+  <button id="demo" title="Pratinjau: beberapa agent berjalan menemui Anda">Demo panggilan</button>
+</header>
+
+<nav class="rooms" id="roomList" aria-label="Daftar ruangan di lantai ini"></nav>
+
+<aside class="detail" id="detail" role="region" aria-label="Detail agent" hidden></aside>
+<aside class="chat" id="chat" role="dialog" aria-label="Chat dengan agent" hidden></aside>
+<aside class="lift" id="lift" role="dialog" aria-label="Panel lift" hidden></aside>
+<section class="modal" id="proj" role="dialog" aria-label="Ringkasan project" hidden></section>
+<div class="fade" id="fade" aria-live="polite"></div>
+
+<footer class="legend">
+  <span><i style="background:var(--busy)"></i>Bekerja (di meja)</span>
+  <span><i style="background:var(--idle)"></i>Siaga → fun area / toilet</span>
+  <span><i style="background:var(--recent)"></i>Aktif &lt; 24 jam</span>
+  <span><i style="background:var(--sleep)"></i>Tidur</span>
+  <span><i style="background:#ffb020;border-radius:3px"></i>? Butuh pendapat</span>
+  <span><i style="background:#3ddc97;border-radius:3px"></i>✓ Selesai</span>
+  <span class="hint">WASD / panah: jalan · Shift: lari · C: ikuti kamera · Klik monitor: PRD · Klik agent: pencapaian · Klik 🛡: laporan celah · Masuk lift: pindah lantai</span>
+  <span class="upd" id="upd"></span>
+</footer>
+
+<div class="err" id="err" role="alert" hidden></div>
+<script type="module" src="main.js"></script>
+</body>
+</html>
