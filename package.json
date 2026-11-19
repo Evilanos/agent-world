@@ -5,11 +5,18 @@
   "description": "A 2D virtual office that visualizes the AI coding agents running on your machine, grouped by project, and lets you chat with them.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "check:i18n": "node scripts/check-i18n.js"
   },
   "engines": {
     "node": ">=20"
   },
-  "keywords": ["ai-agents", "claude-code", "visualization", "canvas", "dashboard"],
+  "keywords": [
+    "ai-agents",
+    "claude-code",
+    "visualization",
+    "canvas",
+    "dashboard"
+  ],
   "type": "commonjs"
 }

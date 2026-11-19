@@ -1,16 +1,23 @@
-import { G, STATUS, KIND, CALL, ROLES, roleOf, $, el, ago, hash, trunc, clamp, damp, P, dist, reduceMotion } from './js/core.js';
+import { G, STATUS, KIND, CALL, ROLES, roleOf, $, el, ago, hash, trunc, clamp, damp, P, dist, reduceMotion, t, toolLabel, actText } from './js/core.js';
+import { LANGS, getLang, setLang, onLang, applyStatic, locale } from './js/i18n.js';
 import { buildFloor, USER_FLOOR, route } from './js/floor.js';
 import { createActors, updateActors, syncActors } from './js/actors.js';
 import { createPlayer, placePlayer, updatePlayer, inZone, blocked } from './js/player.js';
-import { openChat, closeChat } from './js/chat.js';
+import { openChat, closeChat, relocalizeChat } from './js/chat.js';
 import { draw, view, UNIT, screenToWorld, pick } from './js/render.js';
 
 const canvas = $('stage'), ctx = canvas.getContext('2d');
 G.player = createPlayer();
-let riding = false, liftLock = false, liftShown = false, liftOverride = null, firstDone = false, panel = null;
+let settingsOpen = false, lastGuard = null, riding = false, liftLock = false, liftShown = false, liftOverride = null, firstDone = false, panel = null;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const P_ = new URLSearchParams(location.search);
 const TIME_SCALE = Math.min(12, Number(P_.get('speed')) || 1);
+
+// keep the side panels below the header even when it wraps (longer texts in some languages)
+const bar = document.querySelector('.bar');
+function layoutPanels() { document.documentElement.style.setProperty('--bar-b', Math.ceil(bar.getBoundingClientRect().bottom) + 'px'); }
+if (window.ResizeObserver) new ResizeObserver(layoutPanels).observe(bar);
+addEventListener('resize', layoutPanels); layoutPanels();
 
 // ---------- canvas / camera ----------
 function resize() {
@@ -86,7 +93,7 @@ const demo = new Map();
 function computeCalled(v) {
   const list = [];
   for (const r of v.rooms) for (const a of r.agents) {
-    if (demo.has(a.id)) list.push({ id: a.id, kind: demo.get(a.id), at: Date.now(), text: demo.get(a.id) === 'ask' ? '[Demo] Pakai pendekatan A atau B?' : '[Demo] Tugas selesai, semua lulus' });
+    if (demo.has(a.id)) list.push({ id: a.id, kind: demo.get(a.id), at: Date.now(), text: demo.get(a.id) === 'ask' ? t('demo.ask') : t('demo.done') });
     else if (a.attention && a.live && G.chatWith !== a.id && a.attentionAt > (G.chatSeen.get(a.id) || 0) + 60000 && !acked.has(a.id + ':' + a.attentionAt)) list.push({ id: a.id, kind: a.attention, at: a.attentionAt, text: a.lastText });
   }
   list.sort((x, y) => (x.kind === 'ask' ? 0 : 1) - (y.kind === 'ask' ? 0 : 1) || x.at - y.at);
@@ -96,7 +103,7 @@ function ackAgent(a) { if (demo.has(a.id)) demo.delete(a.id); else { acked.add(a
 $('demo').onclick = () => {
   if (demo.size) demo.clear();
   else { const pool = G.actors.map(a => a.agent).filter(a => !G.calledMap.has(a.id)); pool.sort((a, b) => (b.live - a.live) || b.lastActive - a.lastActive); pool.slice(0, 4).forEach((a, i) => demo.set(a.id, i % 2 ? 'done' : 'ask')); }
-  $('demo').textContent = demo.size ? 'Hentikan demo' : 'Demo panggilan'; forceRefresh();
+  $('demo').textContent = demo.size ? t('hdr.demo.stop') : t('hdr.demo'); forceRefresh();
 };
 
 // ---------- building the current floor ----------
@@ -126,19 +133,19 @@ function floorStats() {
 }
 function renderLift() {
   $('lift').replaceChildren(
-    el('h2', { textContent: 'Lift' }), el('p', { className: 'sub', textContent: `Anda di lantai ${G.floorNo}. Pilih lantai tujuan:` }),
+    el('h2', { textContent: t('lift.title') }), el('p', { className: 'sub', textContent: t('lift.where', { n: G.floorNo }) }),
     el('div', { className: 'floorbtns' }, floorStats().reverse().map(s => {
       const b = el('button', { type: 'button', className: 'fbtn' + (s.no === G.floorNo ? ' here' : '') + (s.waiting ? ' hot' : '') });
-      b.append(el('b', { textContent: s.no }), el('span', { textContent: `${s.projects} project · ${s.agents} agent` }), el('i', { textContent: s.waiting ? `${s.waiting} menunggu Anda` : (s.no === USER_FLOOR ? 'lantai Anda' : '') }));
+      b.append(el('b', { textContent: s.no }), el('span', { textContent: t('lift.projAgents', { p: s.projects, a: s.agents }) }), el('i', { textContent: s.waiting ? t('lift.waiting', { n: s.waiting }) : (s.no === USER_FLOOR ? t('lift.yours') : '') }));
       b.disabled = s.no === G.floorNo || riding; b.onclick = () => rideTo(s.no); return b;
-    })), el('p', { className: 'sub', textContent: 'Tekan angka di keyboard, atau keluar dari lift untuk menutup.' }));
+    })), el('p', { className: 'sub', textContent: t('lift.hint') }));
 }
 const showLift = () => { liftShown = true; renderLift(); $('lift').hidden = false; };
 const hideLift = () => { liftShown = false; $('lift').hidden = true; };
 async function rideTo(n) {
   if (riding || n === G.floorNo) return;
   riding = true; renderLift(); liftOverride = 0;
-  $('fade').textContent = `Menuju lantai ${n}…`; $('fade').classList.add('on'); await sleep(900);
+  $('fade').textContent = t('lift.going', { n }); $('fade').classList.add('on'); await sleep(900);
   G.floorNo = n; buildCurrentFloor(); sig = floorSig();
   placePlayer(G.player, n, G.floor.lift.center, Math.PI); selectAgent(null);
   if (G.follow) followPlayer(true, true); else overview(true);
@@ -148,68 +155,70 @@ async function rideTo(n) {
 
 // ---------- panels ----------
 function modal(...kids) {
+  settingsOpen = false;
   const m = $('proj'); m.hidden = false;
-  m.replaceChildren(el('button', { className: 'close', textContent: '✕', ariaLabel: 'Tutup', onclick: closeModal }), ...kids); m.scrollTop = 0; return m;
+  m.replaceChildren(el('button', { className: 'close', textContent: '✕', ariaLabel: t('p.close'), onclick: closeModal }), ...kids); m.scrollTop = 0; return m;
 }
-function closeModal() { $('proj').hidden = true; }
+function closeModal() { $('proj').hidden = true; settingsOpen = false; }
 const chip = (k, v) => el('span', { className: 'chip' }, el('b', { textContent: v }), k);
 const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-AW': '1' }, body: JSON.stringify(body) });
 
 async function openProject(key) {
-  modal(el('p', { className: 'sub', textContent: 'Memuat ringkasan project…' }));
+  modal(el('p', { className: 'sub', textContent: t('pm.loading') }));
   try {
     const res = await fetch('/api/project?key=' + encodeURIComponent(key), { cache: 'no-store' }); if (!res.ok) throw new Error('HTTP ' + res.status);
     const d = await res.json(), st = (s) => STATUS[s] || STATUS.sleeping;
-    modal(el('h2', { textContent: d.name }), el('div', { className: 'ttl', textContent: d.path }), el('div', { className: 'chips' }, [chip('agent', d.stats.agents), chip('online', d.stats.live), chip('bekerja', d.stats.busy)]),
-      el('h3', { textContent: 'Task saat ini' }),
-      d.tasks.length ? el('ul', { className: 'tasks' }, d.tasks.map(t => {
-        const li = el('li', {}), dot = el('i', { className: 'dot' }); dot.style.background = st(t.status).color;
-        li.append(dot, el('b', { textContent: t.title || t.agent }), el('small', { textContent: `${t.agent} · ${st(t.status).label} · ${ago(t.lastActive)}` }));
-        if (t.activity) li.append(el('small', { className: 'act', textContent: '✎ ' + t.activity })); if (t.reply) li.append(el('p', { textContent: trunc(t.reply, 200) })); return li;
-      })) : el('p', { className: 'sub', textContent: 'Belum ada task tercatat.' }),
-      el('h3', { textContent: 'PRD / dokumen project' }),
-      ...(d.docs.length ? d.docs.flatMap(doc => [el('div', { className: 'docname', textContent: doc.name + (doc.truncated ? ' (potongan awal)' : '') }), el('pre', { textContent: doc.text })])
-        : [el('p', { className: 'sub', textContent: 'Tidak ada PRD.md / README.md di folder project ini.' })]));
-  } catch (e) { modal(el('p', { className: 'sub', textContent: 'Gagal memuat ringkasan: ' + e.message })); }
+    modal(el('h2', { textContent: d.name }), el('div', { className: 'ttl', textContent: d.path }), el('div', { className: 'chips' }, [chip(t('chip.agents'), d.stats.agents), chip(t('chip.online'), d.stats.live), chip(t('chip.working'), d.stats.busy)]),
+      el('h3', { textContent: t('pm.tasks') }),
+      d.tasks.length ? el('ul', { className: 'tasks' }, d.tasks.map(tk => {
+        const li = el('li', {}), dot = el('i', { className: 'dot' }); dot.style.background = st(tk.status).color;
+        li.append(dot, el('b', { textContent: tk.title || tk.agent }), el('small', { textContent: `${tk.agent} · ${st(tk.status).label} · ${ago(tk.lastActive)}` }));
+        const tl = toolLabel(tk.tool, tk.target) || tk.activity; if (tl) li.append(el('small', { className: 'act', textContent: '✎ ' + tl })); if (tk.reply) li.append(el('p', { textContent: trunc(tk.reply, 200) })); return li;
+      })) : el('p', { className: 'sub', textContent: t('pm.noTasks') }),
+      el('h3', { textContent: t('pm.docs') }),
+      ...(d.docs.length ? d.docs.flatMap(doc => [el('div', { className: 'docname', textContent: doc.name + (doc.truncated ? t('pm.excerpt') : '') }), el('pre', { textContent: doc.text })])
+        : [el('p', { className: 'sub', textContent: t('pm.noDocs') })]));
+  } catch (e) { modal(el('p', { className: 'sub', textContent: t('pm.fail', { msg: e.message }) })); }
 }
 
 async function openSecurity(key, force = false) {
-  modal(el('p', { className: 'sub', textContent: 'Security sedang memindai kode project…' }));
+  modal(el('p', { className: 'sub', textContent: t('sm.scanning') }));
   try {
     const j = await (await fetch('/api/security?key=' + encodeURIComponent(key) + (force ? '&force=1' : ''))).json();
-    if (j.error) throw new Error(j.error);
+    if (j.error) throw new Error(j.error === 'folder-not-found' ? t('sm.notFound') : j.error);
     const r = j.report; G.security[key] = { ...r, _at: Date.now() };
-    const sev = { high: ['Tinggi', '#ff5d5d'], medium: ['Sedang', '#ffb020'], low: ['Rendah', '#4aa8ff'] };
-    modal(el('h2', { textContent: '🛡 Laporan Security · ' + j.name }), el('div', { className: 'ttl', textContent: j.path }),
-      r.skipped ? el('p', { className: 'sub', textContent: r.note }) : el('div', { className: 'chips' }, [chip('tinggi', r.counts.high), chip('sedang', r.counts.medium), chip('rendah', r.counts.low), chip('file dipindai', r.scannedFiles), chip('ms', r.durationMs || 0)]),
-      el('p', { className: 'sub', textContent: 'Pemindaian statis lokal (pola berisiko di kode & konfigurasi). Nilai rahasia selalu disamarkan. Ini bukan pengganti audit penuh.' + (r.truncated ? ' Hasil dipotong (batas file/waktu).' : '') }),
-      el('button', { type: 'button', textContent: 'Pindai ulang', onclick: () => openSecurity(key, true) }),
-      !r.findings.length && !r.skipped ? el('p', { className: 'sub', textContent: 'Tidak ada temuan dari aturan yang dipakai. 👍' }) : el('ul', { className: 'tasks' }, r.findings.map(f => {
+    const sev = { high: [t('sev.high'), '#ff5d5d'], medium: [t('sev.medium'), '#ffb020'], low: [t('sev.low'), '#4aa8ff'] };
+    const secText = (f, part) => { const k = 'sec.' + f.rule + '.' + part; const v = t(k); return v !== k ? v : f[part]; };
+    modal(el('h2', { textContent: t('sm.title', { name: j.name }) }), el('div', { className: 'ttl', textContent: j.path }),
+      r.skipped ? el('p', { className: 'sub', textContent: t('sm.skipped') }) : el('div', { className: 'chips' }, [chip(t('sm.chip.high'), r.counts.high), chip(t('sm.chip.medium'), r.counts.medium), chip(t('sm.chip.low'), r.counts.low), chip(t('sm.files'), r.scannedFiles), chip(t('sm.ms'), r.durationMs || 0)]),
+      el('p', { className: 'sub', textContent: t('sm.disclaimer') + (r.truncated ? t('sm.truncated') : '') }),
+      el('button', { type: 'button', textContent: t('sm.rescan'), onclick: () => openSecurity(key, true) }),
+      !r.findings.length && !r.skipped ? el('p', { className: 'sub', textContent: t('sm.clean') }) : el('ul', { className: 'tasks' }, r.findings.map(f => {
         const li = el('li', {}), dot = el('i', { className: 'dot' }); dot.style.background = sev[f.sev][1];
-        li.append(dot, el('b', { textContent: f.title }), el('small', { textContent: `${sev[f.sev][0]} · ${f.file}${f.line ? ':' + f.line : ''}` }));
-        if (f.snippet) li.append(el('pre', { textContent: f.snippet })); li.append(el('p', { textContent: '→ ' + f.advice })); return li;
+        li.append(dot, el('b', { textContent: secText(f, 'title') + (f.extra ? ': ' + f.extra : '') }), el('small', { textContent: `${sev[f.sev][0]} · ${f.file}${f.line ? ':' + f.line : ''}` }));
+        if (f.snippet) li.append(el('pre', { textContent: f.snippet })); li.append(el('p', { textContent: '→ ' + secText(f, 'advice') })); return li;
       })));
-  } catch (e) { modal(el('p', { className: 'sub', textContent: 'Gagal memuat laporan: ' + e.message })); }
+  } catch (e) { modal(el('p', { className: 'sub', textContent: t('sm.fail', { msg: e.message }) })); }
 }
 
 async function openFired() {
   const j = await (await fetch('/api/fired')).json();
-  modal(el('h2', { textContent: 'Agent yang dipecat' }), el('p', { className: 'sub', textContent: 'Pemecatan hanya menyembunyikan agent dari kantor. File sesi di ~/.claude tidak dihapus, jadi bisa dipulihkan.' }),
-    j.fired.length ? el('ul', { className: 'tasks' }, j.fired.map(f => { const li = el('li', {}); li.append(el('b', { textContent: f.name }), el('small', { textContent: `${f.project || ''} · dipecat ${ago(f.firedAt)}` }), el('button', { type: 'button', textContent: 'Pulihkan', onclick: async () => { await post('/api/unfire', { id: f.id }); await sleep(2300); forceRefresh(); openFired(); } })); return li; }))
-      : el('p', { className: 'sub', textContent: 'Belum ada agent yang dipecat.' }));
+  modal(el('h2', { textContent: t('fd.title') }), el('p', { className: 'sub', textContent: t('fd.note') }),
+    j.fired.length ? el('ul', { className: 'tasks' }, j.fired.map(f => { const li = el('li', {}); li.append(el('b', { textContent: f.name }), el('small', { textContent: t('fd.when', { project: f.project || '', ago: ago(f.firedAt) }) }), el('button', { type: 'button', textContent: t('fd.restore'), onclick: async () => { await post('/api/unfire', { id: f.id }); await sleep(2300); forceRefresh(); openFired(); } })); return li; }))
+      : el('p', { className: 'sub', textContent: t('fd.empty') }));
 }
 $('fired').onclick = openFired;
 
 // ---- agent panel: info / achievements / "pecat" with the agent defending itself ----
-const ACH = { edit: 'file diedit/ditulis', bash: 'perintah dijalankan', read: 'pencarian & bacaan', web: 'riset web', agent: 'subagent didelegasikan' };
+const ACH = ['edit', 'bash', 'read', 'web', 'agent'];
 async function fetchAchv(id) { const r = await fetch('/api/agent?id=' + encodeURIComponent(id)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
 function achvView(h) {
-  const nodes = [], counts = Object.entries(h.counts || {}).filter(([k, v]) => v && ACH[k]).map(([k, v]) => chip(ACH[k], v.toLocaleString('id-ID')));
-  nodes.push(el('div', { className: 'chips' }, [chip('tugas dari Anda', h.totalPrompts || 0), ...counts]));
-  if (h.first) nodes.push(el('p', { className: 'sub', textContent: `Bekerja sejak ${new Date(h.first).toLocaleDateString('id-ID')} · terakhir ${ago(h.last)}${h.partial ? ' · (riwayat sangat panjang, sebagian dipindai)' : ''}` }));
-  if (h.topics && h.topics.length) nodes.push(el('h3', { textContent: 'Topik yang dikerjakan' }), el('ul', { className: 'plain' }, h.topics.map(t => el('li', { textContent: t }))));
-  nodes.push(el('h3', { textContent: 'Garis besar tugas' }));
-  nodes.push(h.tasks && h.tasks.length ? el('ol', { className: 'plain' }, h.tasks.map(t => el('li', {}, el('span', { textContent: t.text }), t.ts ? el('small', { textContent: new Date(t.ts).toLocaleDateString('id-ID') }) : ''))) : el('p', { className: 'sub', textContent: h.note || 'Belum ada tugas tercatat.' }));
+  const nodes = [], counts = Object.entries(h.counts || {}).filter(([k, v]) => v && ACH.includes(k)).map(([k, v]) => chip(t('ach.' + k), v.toLocaleString(locale())));
+  nodes.push(el('div', { className: 'chips' }, [chip(t('ach.prompts'), h.totalPrompts || 0), ...counts]));
+  if (h.first) nodes.push(el('p', { className: 'sub', textContent: t('ach.since', { date: new Date(h.first).toLocaleDateString(locale()), ago: ago(h.last) }) + (h.partial ? t('ach.partial') : '') }));
+  if (h.topics && h.topics.length) nodes.push(el('h3', { textContent: t('ach.topics') }), el('ul', { className: 'plain' }, h.topics.map(tp => el('li', { textContent: tp }))));
+  nodes.push(el('h3', { textContent: t('ach.outline') }));
+  nodes.push(h.tasks && h.tasks.length ? el('ol', { className: 'plain' }, h.tasks.map(tk => el('li', {}, el('span', { textContent: tk.text }), tk.ts ? el('small', { textContent: new Date(tk.ts).toLocaleDateString(locale()) }) : ''))) : el('p', { className: 'sub', textContent: h.noTranscript ? t('ach.noTranscript') : t('ach.none') }));
   return nodes;
 }
 function selectAgent(id) {
@@ -232,28 +241,28 @@ function renderAgentPanel() {
   const a = act.agent, st = STATUS[a.status], role = ROLES[act.role] || ROLES.casual, call = G.calledMap.get(a.id);
   const row = (k, v) => [el('dt', { textContent: k }), el('dd', { textContent: v })];
   const badge = el('span', { className: 'badge', textContent: st.label }); badge.style.background = st.color;
-  const doing = ({ work: 'Bekerja di meja', sleep: 'Tertidur di meja', sofa: 'Santai di sofa', drink: 'Ngopi', pingpong: 'Main pingpong', chat: 'Ngobrol', pee: 'Buang air kecil', poop: 'Buang air besar', wash: 'Cuci tangan', stand: 'Bersantai', wave: 'Melambai ke Anda', cheer: 'Melapor: selesai!', plead: 'Memohon agar tidak dipecat', sad: 'Sedih' })[act.goal ? act.goal.pose : ''] || '';
-  const kids = [el('button', { className: 'close', textContent: '✕', title: 'Tutup', ariaLabel: 'Tutup detail', onclick: () => selectAgent(null) }), el('h2', { textContent: a.name }), el('div', { className: 'ttl', textContent: a.title || KIND[a.kind].label }), badge];
-  const achSection = () => [el('h3', { textContent: 'Pencapaian' }), panel.loading ? el('p', { className: 'sub', textContent: 'Membaca riwayat kerja… (transkrip besar bisa memakan beberapa detik)' }) : panel.error ? el('p', { className: 'sub', textContent: 'Gagal: ' + panel.error }) : panel.achv ? el('div', {}, achvView(panel.achv)) : ''];
+  const dk = 'doing.' + (act.goal ? act.goal.pose : ''), doing = t(dk) !== dk ? t(dk) : '';
+  const kids = [el('button', { className: 'close', textContent: '✕', title: t('p.close'), ariaLabel: t('p.closeDetail'), onclick: () => selectAgent(null) }), el('h2', { textContent: a.name }), el('div', { className: 'ttl', textContent: a.title || KIND[a.kind].label }), badge];
+  const achSection = () => [el('h3', { textContent: t('ach.title') }), panel.loading ? el('p', { className: 'sub', textContent: t('ach.loading') }) : panel.error ? el('p', { className: 'sub', textContent: t('ach.fail', { msg: panel.error }) }) : panel.achv ? el('div', {}, achvView(panel.achv)) : ''];
 
   if (panel.mode === 'defend' || panel.mode === 'decide') {
-    const h = panel.achv, lines = h ? `Saya sudah menerima ${h.totalPrompts} tugas dari Anda, mengedit ${((h.counts || {}).edit || 0).toLocaleString('id-ID')} file dan menjalankan ${((h.counts || {}).bash || 0).toLocaleString('id-ID')} perintah.` : '';
-    kids.push(el('div', { className: 'defense' }, el('b', { textContent: '🙏 ' + a.name + ' membela diri' }),
-      el('p', { textContent: panel.mode === 'defend' ? '“Tunggu dulu, Bos! Sebelum Anda memecat saya, tolong lihat dulu apa saja yang sudah saya kerjakan.”' : `“${lines || 'Itu semua yang sudah saya kerjakan.'} Mohon pertimbangkan kembali.”` })));
-    if (panel.mode === 'defend') kids.push(el('div', { className: 'row' }, el('button', { type: 'button', className: 'primary', textContent: 'Lihat pencapaian saya', disabled: panel.loading, onclick: () => loadAchv(a.id, true) }), el('button', { type: 'button', textContent: 'Batal', onclick: cancelFire })), ...(panel.loading || panel.error ? achSection() : []), ...(panel.error && !panel.loading ? [] : []));
-    else kids.push(...achSection(), el('div', { className: 'row' }, el('button', { type: 'button', className: 'danger', textContent: 'Tetap pecat', onclick: () => confirmFire(a) }), el('button', { type: 'button', className: 'primary', textContent: 'Beri kesempatan lagi', onclick: cancelFire })), el('p', { className: 'sub', textContent: panel.error || 'Pemecatan hanya menyembunyikan agent dari kantor (bisa dipulihkan lewat tombol “Dipecat”).' }));
+    const h = panel.achv, lines = h ? t('def.stats', { prompts: h.totalPrompts, edits: ((h.counts || {}).edit || 0).toLocaleString(locale()), cmds: ((h.counts || {}).bash || 0).toLocaleString(locale()) }) : '';
+    kids.push(el('div', { className: 'defense' }, el('b', { textContent: t('def.title', { name: a.name }) }),
+      el('p', { textContent: panel.mode === 'defend' ? t('def.plea') : (lines || t('def.statsNone')) })));
+    if (panel.mode === 'defend') kids.push(el('div', { className: 'row' }, el('button', { type: 'button', className: 'primary', textContent: t('def.view'), disabled: panel.loading, onclick: () => loadAchv(a.id, true) }), el('button', { type: 'button', textContent: t('def.cancel'), onclick: cancelFire })), ...(panel.loading || panel.error ? achSection() : []), ...(panel.error && !panel.loading ? [] : []));
+    else kids.push(...achSection(), el('div', { className: 'row' }, el('button', { type: 'button', className: 'danger', textContent: t('def.confirm'), onclick: () => confirmFire(a) }), el('button', { type: 'button', className: 'primary', textContent: t('def.spare'), onclick: cancelFire })), el('p', { className: 'sub', textContent: panel.error || t('def.note') }));
     box.replaceChildren(...kids); return;
   }
-  if (a.kind === 'claude') kids.push(el('div', { className: 'row' }, el('button', { type: 'button', className: 'primary', textContent: '💬 Ngobrol / beri perintah', onclick: () => openChat(act) })));
-  if (call) kids.push(el('div', { className: 'callbox ' + call.kind }, el('b', { textContent: CALL[call.kind].label }), el('p', { textContent: call.text || '(tidak ada ringkasan)' }), el('button', { type: 'button', textContent: 'Sudah saya lihat — kembali ke ruangan', onclick: () => ackAgent(a) })));
-  kids.push(el('h3', { textContent: 'Seragam' }), el('p', { className: 'sub', textContent: `${role.label} (${role.desc}), sesuai project ${act.roleProject || ''}`.replace(/, sesuai project $/, '') }),
-    el('h3', { textContent: 'Sedang' }), el('dl', {}, ...row('Aktivitas', doing || '—'), ...(a.activity ? row('Tool', a.activity) : [])),
+  if (a.kind === 'claude') kids.push(el('div', { className: 'row' }, el('button', { type: 'button', className: 'primary', textContent: t('p.chat'), onclick: () => openChat(act) })));
+  if (call) kids.push(el('div', { className: 'callbox ' + call.kind }, el('b', { textContent: CALL[call.kind].label }), el('p', { textContent: call.text || t('p.noSummary') }), el('button', { type: 'button', textContent: t('p.ack'), onclick: () => ackAgent(a) })));
+  kids.push(el('h3', { textContent: t('p.uniform') }), el('p', { className: 'sub', textContent: `${role.label} (${role.desc})` }),
+    el('h3', { textContent: t('p.now') }), el('dl', {}, ...row(t('p.activity'), doing || '—'), ...(actText(a) ? row(t('p.tool'), actText(a)) : [])),
     ...achSection(),
-    ...(a.lastReply ? [el('h3', { textContent: 'Balasan terakhir' }), el('p', { className: 'reply', textContent: a.lastReply })] : []),
-    el('h3', { textContent: 'Info' }), el('dl', {}, ...row('Jenis', KIND[a.kind].label), ...row('Folder', a.cwd), ...(a.worktree ? row('Worktree', a.worktree) : []), ...row('Sumber', a.entrypoint || '—'), ...(a.pid ? row('PID', String(a.pid)) : []), ...row('Aktivitas terakhir', ago(a.lastActive)), ...row('ID', a.id)),
-    el('h3', { textContent: `Subagent (${a.subagentTotal})` }),
-    a.subagents.length ? el('ul', {}, a.subagents.map(s => el('li', {}, `${s.working ? '● ' : ''}${s.type}`, el('small', { textContent: trunc(s.description, 90) + ' · ' + ago(s.lastActive) })))) : el('div', { className: 'ttl', textContent: 'Tidak ada subagent tercatat.' }),
-    el('div', { className: 'dangerzone' }, el('button', { type: 'button', className: 'danger', textContent: 'Pecat agent…', onclick: startFire })));
+    ...(a.lastReply ? [el('h3', { textContent: t('p.lastReply') }), el('p', { className: 'reply', textContent: a.lastReply })] : []),
+    el('h3', { textContent: t('p.info') }), el('dl', {}, ...row(t('p.type'), KIND[a.kind].label), ...row(t('p.folder'), a.cwd), ...(a.worktree ? row(t('p.worktree'), a.worktree) : []), ...row(t('p.source'), a.entrypoint || '—'), ...(a.pid ? row(t('p.pid'), String(a.pid)) : []), ...row(t('p.lastActive'), ago(a.lastActive)), ...row(t('p.id'), a.id)),
+    el('h3', { textContent: t('p.subagents', { n: a.subagentTotal }) }),
+    a.subagents.length ? el('ul', {}, a.subagents.map(s => el('li', {}, `${s.working ? '● ' : ''}${s.type}`, el('small', { textContent: trunc(s.description, 90) + ' · ' + ago(s.lastActive) })))) : el('div', { className: 'ttl', textContent: t('p.noSubagents') }),
+    el('div', { className: 'dangerzone' }, el('button', { type: 'button', className: 'danger', textContent: t('p.fire'), onclick: startFire })));
   box.replaceChildren(...kids);
 }
 function startFire() { if (!panel) return; panel.mode = 'defend'; G.defending = panel.id; renderAgentPanel(); }
@@ -261,8 +270,8 @@ function cancelFire() { if (!panel) return; panel.mode = 'info'; G.defending = n
 async function confirmFire(a) {
   panel.error = '';
   const r = await post('/api/fire', { id: a.id });
-  if (r.status === 409) { panel.mode = 'defend'; panel.error = 'Server menolak: lihat pencapaian agent ini dulu sebelum memecatnya.'; renderAgentPanel(); return; }
-  if (!r.ok) { panel.error = 'Gagal memecat (HTTP ' + r.status + ')'; renderAgentPanel(); return; }
+  if (r.status === 409) { panel.mode = 'defend'; panel.error = t('def.err409'); renderAgentPanel(); return; }
+  if (!r.ok) { panel.error = t('def.errHttp', { n: r.status }); renderAgentPanel(); return; }
   const act = G.actors.find(x => x.agent.id === a.id);
   ghosts.set(a.id, { agent: a, roomKey: act ? act.roomKey : null });
   G.defending = null; G.firing.add(a.id); selectAgent(null);       // the agent packs up and walks to the lift
@@ -271,25 +280,25 @@ async function confirmFire(a) {
 function selectGuard(g) {
   G.selectedId = g.agent.id; panel = null; const box = $('detail'); box.hidden = false;
   const key = g.agent.projectKey, rep = key ? G.security[key] : null, n = rep && rep.counts ? rep.counts : null;
-  const bd = el('span', { className: 'badge', textContent: 'Penjaga ruangan' }); bd.style.background = '#f2c200';
-  box.replaceChildren(el('button', { className: 'close', textContent: '✕', ariaLabel: 'Tutup detail', onclick: () => selectAgent(null) }), el('h2', { textContent: '🛡 Security' }), el('div', { className: 'ttl', textContent: g.agent.title }), bd,
-    el('h3', { textContent: 'Tugas' }), el('ol', { className: 'plain' }, el('li', { textContent: 'Mencegah agent dari project yang berbeda mengobrol atau bekerja bersamaan.' }), el('li', { textContent: 'Memeriksa celah keamanan pada sistem yang dibangun di project ini.' })),
-    el('h3', { textContent: 'Status' }), el('dl', {}, ...(key ? [el('dt', { textContent: 'Celah sistem' }), el('dd', { textContent: n ? `${n.high} tinggi · ${n.medium} sedang · ${n.low} rendah` : (rep && rep.skipped ? 'bukan project' : 'memindai…') })] : []),
-      el('dt', { textContent: 'Lintas project dicegah' }), el('dd', { textContent: `${G.blocked}× (sesi ini)` })),
-    ...(key ? [el('div', { className: 'dangerzone' }, el('div', { className: 'row' }, el('button', { type: 'button', className: 'primary', textContent: '💬 Ngobrol dengan Security', onclick: () => openChat(g) }), el('button', { type: 'button', textContent: 'Buka laporan celah sistem', onclick: () => openSecurity(key) })), el('p', { className: 'sub', textContent: 'Minta Security memverifikasi temuan dan membuatkan prompt perbaikan untuk dilempar ke agent project ini.' }))] : []));
+  const bd = el('span', { className: 'badge', textContent: t('g.badge') }); bd.style.background = '#f2c200'; lastGuard = g;
+  box.replaceChildren(el('button', { className: 'close', textContent: '✕', ariaLabel: t('p.closeDetail'), onclick: () => selectAgent(null) }), el('h2', { textContent: t('g.title') }), el('div', { className: 'ttl', textContent: g.agent.title }), bd,
+    el('h3', { textContent: t('g.duties') }), el('ol', { className: 'plain' }, el('li', { textContent: t('g.duty1') }), el('li', { textContent: t('g.duty2') })),
+    el('h3', { textContent: t('g.status') }), el('dl', {}, ...(key ? [el('dt', { textContent: t('g.vulns') }), el('dd', { textContent: n ? t('g.counts', { h: n.high, m: n.medium, l: n.low }) : (rep && rep.skipped ? t('g.notproject') : t('g.scanning')) })] : []),
+      el('dt', { textContent: t('g.blocked') }), el('dd', { textContent: t('g.blockedVal', { n: G.blocked }) })),
+    ...(key ? [el('div', { className: 'dangerzone' }, el('div', { className: 'row' }, el('button', { type: 'button', className: 'primary', textContent: t('g.chat'), onclick: () => openChat(g) }), el('button', { type: 'button', textContent: t('g.report'), onclick: () => openSecurity(key) })), el('p', { className: 'sub', textContent: t('g.chatHint') }))] : []));
 }
 
 // ---------- HUD ----------
 function renderHud(data) {
   $('host').textContent = data.host; const s = data.stats || {};
-  $('chips').replaceChildren(...[['lantai', G.floors.length], ['ruangan', s.rooms], ['agent', s.agents], ['online', s.live], ['bekerja', s.busy], ['menunggu Anda', G.callOrder.length], ['lintas project dicegah', G.blocked]]
-    .map(([k, v]) => el('span', { className: 'chip' + (k === 'menunggu Anda' && v ? ' hot' : '') }, el('b', { textContent: v ?? 0 }), k)));
-  $('floorBadge').textContent = `Lantai ${G.floorNo}` + (G.floorNo === USER_FLOOR ? ' · lantai Anda' : '');
+  $('chips').replaceChildren(...[['chip.floors', G.floors.length], ['chip.rooms', s.rooms], ['chip.agents', s.agents], ['chip.online', s.live], ['chip.working', s.busy], ['chip.waiting', G.callOrder.length], ['chip.blocked', G.blocked]]
+    .map(([k, v]) => el('span', { className: 'chip' + (k === 'chip.waiting' && v ? ' hot' : '') }, el('b', { textContent: v ?? 0 }), t(k))));
+  $('floorBadge').textContent = t(G.floorNo === USER_FLOOR ? 'floor.badge.yours' : 'floor.badge', { n: G.floorNo });
   const f = G.floor, gc = (p) => G.actors.filter(a => a.goal && a.goal.key.startsWith(p)).length, items = [];
   if (f) {
-    f.projectRooms.forEach(r => items.push({ name: r.name, sub: `${(ROLES[r.role] || ROLES.casual).label} · ${r.agents.length} agent · ${r.liveCount} online`, hue: hash(r.name) % 360, rd: r.rd, dots: r.agents }));
-    items.push({ name: 'Fun Area', sub: `${gc('fun:')} agent bersantai`, hue: 100, rd: f.plan.fun }, { name: 'Toilet', sub: `${gc('wc:')} agent di toilet`, hue: 195, rd: f.plan.toilet }, { name: 'Lift', sub: 'pindah lantai', hue: 220, rd: f.plan.lift });
-    if (f.plan.office) items.push({ name: 'Ruang Anda', sub: 'kantor pribadi', hue: 42, rd: f.plan.office });
+    f.projectRooms.forEach(r => items.push({ name: r.name, sub: t('room.projsub', { role: (ROLES[r.role] || ROLES.casual).label, agents: r.agents.length, live: r.liveCount }), hue: hash(r.name) % 360, rd: r.rd, dots: r.agents }));
+    items.push({ name: t('room.fun'), sub: t('side.fun', { n: gc('fun:') }), hue: 100, rd: f.plan.fun }, { name: t('room.toilet'), sub: t('side.toilet', { n: gc('wc:') }), hue: 195, rd: f.plan.toilet }, { name: t('room.lift'), sub: t('side.lift'), hue: 220, rd: f.plan.lift });
+    if (f.plan.office) items.push({ name: t('room.office'), sub: t('side.office'), hue: 42, rd: f.plan.office });
   }
   $('roomList').replaceChildren(...items.map(it => {
     const b = el('button', { type: 'button' }); b.style.setProperty('--c', `hsl(${it.hue} 60% 55%)`);
@@ -344,13 +353,14 @@ async function refresh() {
         if (P_.get('ride')) rideTo(Number(P_.get('ride')));
         const sel = P_.get('select'); if (sel) { const a = G.actors.find(x => x.agent.name.includes(sel)) || G.actors[0]; if (a) { selectAgent(a.agent.id); if (P_.has('fire')) { startFire(); if (P_.get('fire') === '2') loadAchv(a.agent.id, true); } } }
         const gd = P_.get('guard'); if (gd !== null && G.guards[0]) selectGuard(G.guards[Number(gd) || 0]);
+        if (P_.get('modal') === 'settings' || P_.get('modal') === 'controller') openSettings('controller'); else if (P_.get('modal') === 'language') openSettings('language');
         if (P_.get('modal') === 'security' && G.floor.projectRooms[0]) openSecurity(G.floor.projectRooms[0].key);
       }
     }
     const h = JSON.stringify([v.stats, G.floorNo, G.callOrder, G.blocked, v.rooms.map(r => [r.key, r.liveCount, r.agents.map(a => [a.id, a.status, a.name])])]) + Math.floor(Date.now() / 8000) + G.selectedId;
     if (h !== hudSig && G.floor) { hudSig = h; renderHud(data); if (panel && panel.mode === 'info' && !panel.loading) renderAgentPanel(); if (liftShown) renderLift(); }
-    $('upd').textContent = 'Diperbarui ' + new Date(data.generatedAt || Date.now()).toLocaleTimeString('id-ID');
-  } catch (e) { console.error(e); $('err').textContent = 'Gagal memuat data agent: ' + e.message; $('err').hidden = false; }
+    $('upd').textContent = t('updated', { time: new Date(data.generatedAt || Date.now()).toLocaleTimeString(locale()) });
+  } catch (e) { console.error(e); $('err').textContent = t('err.load', { msg: e.message }); $('err').hidden = false; }
   finally { busy = false; }
 }
 function forceRefresh() { sig = ''; hudSig = ''; refresh(); }
@@ -360,6 +370,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
 
 addEventListener('keydown', e => {
   if (e.key === 'Escape') { selectAgent(null); closeModal(); }
+  if (e.key.toLowerCase() === 'o' && !e.ctrlKey && !e.metaKey && !(e.target && /INPUT|TEXTAREA/.test(e.target.tagName))) { selectAgent(null); overview(); }
   if (e.key.toLowerCase() === 'c' && !e.ctrlKey && !e.metaKey && !(e.target && /INPUT|TEXTAREA/.test(e.target.tagName))) followPlayer(!G.follow);
   if (liftShown && !riding && /^[1-9]$/.test(e.key)) { const n = Number(e.key); if (G.floors.some(f => f.no === n)) rideTo(n); }
 });
@@ -405,3 +416,52 @@ function frame(now) {
   draw(ctx, t); requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// ---------- settings: language ----------
+// Settings has two menus: Controller (keys, camera, view options, extras) and Languages.
+let settingsTab = 'controller';
+function openSettings(tab) {
+  if (typeof tab === 'string') settingsTab = tab;
+  const tabs = el('div', { className: 'tabs', role: 'tablist' }, [['controller', '🎮 ' + t('set.tab.controller')], ['language', '🌐 ' + t('set.language')]].map(([id, label]) => {
+    const b = el('button', { type: 'button', className: 'tab' + (id === settingsTab ? ' on' : ''), role: 'tab', textContent: label }); b.setAttribute('aria-selected', String(id === settingsTab));
+    b.onclick = () => openSettings(id); return b;
+  }));
+  const body = settingsTab === 'language' ? languageMenu() : controllerMenu();
+  modal(el('h2', { textContent: '⚙ ' + t('set.title') }), tabs, body);
+  settingsOpen = true;     // modal() above clears it, this menu keeps it
+}
+function languageMenu() {
+  return el('div', {}, el('p', { className: 'sub', textContent: t('set.langNote') }), el('div', { className: 'langlist', role: 'radiogroup', ariaLabel: t('set.language') }, LANGS.map(l => {
+    const b = el('button', { type: 'button', className: 'lang' + (l.code === getLang() ? ' on' : ''), role: 'radio', textContent: (l.code === getLang() ? '● ' : '○ ') + l.name, lang: l.code });
+    b.setAttribute('aria-checked', String(l.code === getLang())); b.onclick = () => setLang(l.code); return b;
+  })));
+}
+function controllerMenu() {
+  const keys = [[t('ctl.k.move'), t('ctl.move')], ['Shift', t('ctl.run')], ['C', t('ctl.follow')], ['O', t('ctl.overview')], [t('ctl.k.pan'), t('ctl.pan')], [t('ctl.k.zoom'), t('ctl.zoom')],
+    [t('ctl.k.agent'), t('ctl.agent')], [t('ctl.k.monitor'), t('ctl.monitor')], [t('ctl.k.guard'), t('ctl.guard')], [t('ctl.k.lift'), t('ctl.lift')], ['Esc', t('ctl.close')]];
+  const refresh = () => openSettings();
+  const toggle = (label, on, onclick) => el('button', { type: 'button', className: on ? 'on' : '', textContent: (on ? '✓ ' : '') + label, onclick });
+  const sleepBox = el('input', { type: 'checkbox', checked: $('showSleep').checked });
+  sleepBox.onchange = () => { $('showSleep').checked = sleepBox.checked; $('showSleep').dispatchEvent(new Event('change')); };
+  return el('div', {},
+    el('h3', { textContent: t('ctl.keys') }),
+    el('table', { className: 'keys' }, keys.map(([k, d]) => el('tr', {}, el('td', {}, el('kbd', { textContent: k })), el('td', { textContent: d })))),
+    el('h3', { textContent: t('ctl.actions') }),
+    el('div', { className: 'actions' },
+      toggle(t('hdr.follow') + ' (C)', G.follow, () => { followPlayer(!G.follow); refresh(); }),
+      el('button', { type: 'button', textContent: t('hdr.overview') + ' (O)', onclick: () => { $('overview').click(); closeModal(); } }),
+      toggle(t('hdr.demo'), demo.size > 0, () => { $('demo').click(); refresh(); }),
+      el('button', { type: 'button', textContent: t('hdr.fired'), onclick: openFired })),
+    el('label', { className: 'checkrow' }, sleepBox, el('span', { textContent: t('hdr.sleeping') })));
+}
+$('settings').onclick = () => openSettings();
+applyStatic();
+$('demo').textContent = t('hdr.demo');
+onLang(() => {
+  applyStatic(); $('demo').textContent = demo.size ? t('hdr.demo.stop') : t('hdr.demo');
+  if (settingsOpen) openSettings();
+  if (liftShown) renderLift();
+  if (panel) renderAgentPanel(); else if (G.selectedId && lastGuard) selectGuard(lastGuard);
+  relocalizeChat();
+  forceRefresh();            // rebuilds the floor so every label drawn on the canvas uses the new language
+});

@@ -1,5 +1,5 @@
 // Draws one frame of the floor onto the 2D canvas, and answers "what is under the mouse?".
-import { G, STATUS, KIND, ROLES, CALL, trunc } from './core.js';
+import { G, STATUS, KIND, ROLES, CALL, trunc, t as tr, actText } from './core.js';   // `t` is the time parameter of draw()
 import * as S from './shapes.js';
 
 export const UNIT = 22;
@@ -55,13 +55,13 @@ export function draw(ctx, t) {
     for (const h of a.helpers) { ctx.globalAlpha = 0.35 + 0.45 * Math.abs(Math.sin(t * 3 + h.phase)); S.line(ctx, h.x, h.z - 0.9, a.st.pos.x, a.st.pos.z + 0.5, '#ffb020', 0.06, 'round'); ctx.globalAlpha = 1; }
     const call = G.calledMap.get(a.agent.id);
     let bz = top - 0.15;
-    if (showNames) { const sub = a.agent.activity ? '✎ ' + a.agent.activity : (a.guard ? 'Security' : (ROLES[a.role] || ROLES.casual).label); S.pill(ctx, trunc(a.guard ? (a.agent.projectName || 'Security') : a.agent.name, 18), x, top - 0.45, 0.42, { sub: trunc(sub, 28), subFg: a.guard ? '#f2c200' : '#9aa4c0' }); bz = top - 1.5; }
+    if (showNames) { const act = actText(a.agent), sub = act ? '✎ ' + act : (a.guard ? tr('guard.name') : (ROLES[a.role] || ROLES.casual).label); S.pill(ctx, trunc(a.guard ? (a.agent.projectName || tr('guard.name')) : a.agent.name, 18), x, top - 0.45, 0.42, { sub: trunc(sub, 28), subFg: a.guard ? '#f2c200' : '#9aa4c0' }); bz = top - 1.5; }
     if (call && !a.moving) S.bubble(ctx, CALL[call.kind].bubble, x, bz - 0.1 + Math.sin(t * 3) * 0.05, 0.42, CALL[call.kind].bg, CALL[call.kind].fg, trunc(call.text || '', 26));
     else if (call) S.bubble(ctx, '!', x, bz, 0.5, CALL[call.kind].bg, CALL[call.kind].fg);
     else if (a.bubbleTxt) S.bubble(ctx, a.bubbleTxt, x, bz + Math.sin(t * 3 + a.phase) * 0.04, 0.5, 'rgba(255,255,255,.95)', '#10131c');
     if (a.pose === 'sleep' && !a.moving) { const k = (t * 0.4 + a.phase) % 1; ctx.globalAlpha = 1 - k; S.text(ctx, 'Z z', x + 0.6, top + 0.4 - k * 0.6, 0.5, '#cfd8ee', 'center', 800); ctx.globalAlpha = 1; }
   }
-  if (G.player && G.player.floorNo === f.no) { const p = G.player.pos; S.pill(ctx, 'Anda', p.x, p.z - 2.6, 0.44, { bg: '#d8b25a', fg: '#0b0f1a' }); }
+  if (G.player && G.player.floorNo === f.no) { const p = G.player.pos; S.pill(ctx, tr('you'), p.x, p.z - 2.6, 0.44, { bg: '#d8b25a', fg: '#0b0f1a' }); }
 }
 
 // what is at world position (wx, wz)?

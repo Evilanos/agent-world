@@ -10,23 +10,23 @@ const MAX_FILES = 600, MAX_BYTES = 200 * 1024, MAX_FINDINGS = 60, BUDGET_MS = 60
 const PLACEHOLDER = /your[_-]|xxx|example|changeme|change_me|dummy|sample|<[^>]+>|\$\{|process\.env|getenv|env\(|\*{3,}|placeholder|test|todo/i;
 
 const RULES = [
-  { id: 'aws-key', sev: 'high', title: 'AWS access key tertanam di kode', re: /AKIA[0-9A-Z]{16}/, advice: 'Cabut kunci, pindahkan ke environment / secret manager.', secret: true },
-  { id: 'private-key', sev: 'high', title: 'Private key tertanam di repo', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, advice: 'Hapus dari repo, rotasi key, simpan di vault.', secret: true },
-  { id: 'token', sev: 'high', title: 'Token API (GitHub / OpenAI / Slack) tertanam', re: /\b(ghp_[A-Za-z0-9]{30,}|sk-[A-Za-z0-9]{20,}|xox[bp]-[A-Za-z0-9-]{10,})/, advice: 'Revoke token dan pakai environment variable.', secret: true },
-  { id: 'hardcoded-secret', sev: 'medium', title: 'Password / secret / token di-hardcode', re: /(?:api[_-]?key|secret|passwd|password|pwd|token|auth)[\w-]*\s*[:=]\s*['"]([^'"\s]{8,})['"]/i, advice: 'Pindahkan ke .env atau secret manager.', secret: true, check: (m) => !PLACEHOLDER.test(m[1]) },
-  { id: 'cmd-injection', sev: 'high', title: 'Eksekusi perintah dengan input dinamis (command injection)', re: /\b(?:exec|execSync|spawn|system|shell_exec|passthru|popen|proc_open)\s*\([^)]*(?:\+|\$\{|\$_(?:GET|POST|REQUEST)|`)/, advice: 'Pakai execFile / argumen array dan validasi input.' },
-  { id: 'eval', sev: 'medium', title: 'Penggunaan eval / new Function', re: /\beval\s*\(|\bnew Function\s*\(/, advice: 'Hindari eval; parse data dengan JSON.parse atau pustaka aman.' },
-  { id: 'xss-innerhtml', sev: 'medium', title: 'Potensi XSS (innerHTML / document.write)', re: /\.innerHTML\s*=(?!\s*['"`]\s*['"`])|dangerouslySetInnerHTML|document\.write\s*\(/, advice: 'Gunakan textContent atau sanitasi (DOMPurify).' },
-  { id: 'php-xss', sev: 'high', title: 'PHP mencetak input pengguna tanpa escape (XSS)', re: /\b(?:echo|print)\b[^;\n]*\$_(?:GET|POST|REQUEST|COOKIE)\[/, advice: 'Bungkus dengan htmlspecialchars().' },
-  { id: 'sqli-input', sev: 'high', title: 'Query SQL memakai input pengguna langsung (SQL injection)', re: /\b(?:SELECT\s[^;\n]{1,80}?\bFROM|INSERT\s+INTO|UPDATE\s+\S+\s+SET|DELETE\s+FROM)\b[^;\n]{0,160}?\$_(?:GET|POST|REQUEST|COOKIE)/i, advice: 'Pakai prepared statement / parameter binding.' },
-  { id: 'sqli-concat', sev: 'medium', title: 'Query SQL disusun dari string (periksa asal nilainya)', re: /\b(?:SELECT\s[^;\n]{1,80}?\bFROM|INSERT\s+INTO|UPDATE\s+\S+\s+SET|DELETE\s+FROM)\b[^;\n]{0,120}?(?:["']\s*\.\s*\$|["']\s*\+\s*[\w$]|\$\{)/i, advice: 'Pastikan nilai berasal dari kode tepercaya; selebihnya pakai parameter binding.' },
-  { id: 'php-mysql', sev: 'medium', title: 'Fungsi mysql_* usang (rentan & tidak didukung)', re: /\bmysql_(?:query|connect|fetch_\w+)\s*\(/, advice: 'Migrasi ke PDO / mysqli prepared statement.' },
-  { id: 'php-include', sev: 'high', title: 'include/require atau unserialize dari input pengguna', re: /\b(?:include|require)(?:_once)?\b[^;\n]*\$_(?:GET|POST|REQUEST)|\bunserialize\s*\(\s*\$_/, advice: 'Whitelist file yang boleh di-include; jangan unserialize input.' },
-  { id: 'weak-hash', sev: 'medium', title: 'Hash lemah (md5 / sha1)', re: /\b(?:md5|sha1)\s*\(|createHash\(\s*['"](?:md5|sha1)['"]/i, advice: 'Gunakan bcrypt / argon2 untuk password, SHA-256+ untuk integritas.' },
-  { id: 'cors-wildcard', sev: 'medium', title: 'CORS terbuka untuk semua origin', re: /Access-Control-Allow-Origin['"]?\s*[:,]\s*['"]?\*|origin\s*:\s*['"]\*['"]/, advice: 'Batasi origin ke domain yang dikenal.' },
-  { id: 'tls-off', sev: 'high', title: 'Verifikasi TLS dimatikan', re: /rejectUnauthorized\s*:\s*false|verify\s*=\s*False|CURLOPT_SSL_VERIFYPEER\s*,\s*(?:false|0)|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0/, advice: 'Aktifkan verifikasi sertifikat.' },
-  { id: 'weak-random', sev: 'low', title: 'Math.random dipakai untuk token / secret', re: /(?:token|secret|password|key|session)[^\n]{0,40}Math\.random\(\)|Math\.random\(\)[^\n]{0,40}(?:token|secret|password|session)/i, advice: 'Gunakan crypto.randomBytes / crypto.randomUUID.' },
-  { id: 'chmod-777', sev: 'medium', title: 'Permission 777', re: /chmod\s+(?:-R\s+)?777/, advice: 'Beri izin minimum yang dibutuhkan.' },
+  { id: 'aws-key', sev: 'high', title: 'AWS access key embedded in code', re: /AKIA[0-9A-Z]{16}/, advice: 'Revoke the key and move it to environment variables or a secret manager.', secret: true },
+  { id: 'private-key', sev: 'high', title: 'Private key committed to the repo', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, advice: 'Remove it from the repo, rotate the key and store it in a vault.', secret: true },
+  { id: 'token', sev: 'high', title: 'API token (GitHub / OpenAI / Slack) embedded', re: /\b(ghp_[A-Za-z0-9]{30,}|sk-[A-Za-z0-9]{20,}|xox[bp]-[A-Za-z0-9-]{10,})/, advice: 'Revoke the token and use an environment variable.', secret: true },
+  { id: 'hardcoded-secret', sev: 'medium', title: 'Password / secret / token hard-coded', re: /(?:api[_-]?key|secret|passwd|password|pwd|token|auth)[\w-]*\s*[:=]\s*['"]([^'"\s]{8,})['"]/i, advice: 'Move it to .env or a secret manager.', secret: true, check: (m) => !PLACEHOLDER.test(m[1]) },
+  { id: 'cmd-injection', sev: 'high', title: 'Command execution with dynamic input (command injection)', re: /\b(?:exec|execSync|spawn|system|shell_exec|passthru|popen|proc_open)\s*\([^)]*(?:\+|\$\{|\$_(?:GET|POST|REQUEST)|`)/, advice: 'Use execFile / argument arrays and validate the input.' },
+  { id: 'eval', sev: 'medium', title: 'Use of eval / new Function', re: /\beval\s*\(|\bnew Function\s*\(/, advice: 'Avoid eval; parse data with JSON.parse or a safe library.' },
+  { id: 'xss-innerhtml', sev: 'medium', title: 'Possible XSS (innerHTML / document.write)', re: /\.innerHTML\s*=(?!\s*['"`]\s*['"`])|dangerouslySetInnerHTML|document\.write\s*\(/, advice: 'Use textContent or sanitize (DOMPurify).' },
+  { id: 'php-xss', sev: 'high', title: 'PHP prints user input without escaping (XSS)', re: /\b(?:echo|print)\b[^;\n]*\$_(?:GET|POST|REQUEST|COOKIE)\[/, advice: 'Wrap it in htmlspecialchars().' },
+  { id: 'sqli-input', sev: 'high', title: 'SQL query uses user input directly (SQL injection)', re: /\b(?:SELECT\s[^;\n]{1,80}?\bFROM|INSERT\s+INTO|UPDATE\s+\S+\s+SET|DELETE\s+FROM)\b[^;\n]{0,160}?\$_(?:GET|POST|REQUEST|COOKIE)/i, advice: 'Use prepared statements / parameter binding.' },
+  { id: 'sqli-concat', sev: 'medium', title: 'SQL query built from strings (check where the values come from)', re: /\b(?:SELECT\s[^;\n]{1,80}?\bFROM|INSERT\s+INTO|UPDATE\s+\S+\s+SET|DELETE\s+FROM)\b[^;\n]{0,120}?(?:["']\s*\.\s*\$|["']\s*\+\s*[\w$]|\$\{)/i, advice: 'Make sure values come from trusted code; otherwise use parameter binding.' },
+  { id: 'php-mysql', sev: 'medium', title: 'Deprecated mysql_* functions (vulnerable and unsupported)', re: /\bmysql_(?:query|connect|fetch_\w+)\s*\(/, advice: 'Migrate to PDO / mysqli prepared statements.' },
+  { id: 'php-include', sev: 'high', title: 'include/require or unserialize on user input', re: /\b(?:include|require)(?:_once)?\b[^;\n]*\$_(?:GET|POST|REQUEST)|\bunserialize\s*\(\s*\$_/, advice: 'Whitelist includable files; never unserialize user input.' },
+  { id: 'weak-hash', sev: 'medium', title: 'Weak hash (md5 / sha1)', re: /\b(?:md5|sha1)\s*\(|createHash\(\s*['"](?:md5|sha1)['"]/i, advice: 'Use bcrypt / argon2 for passwords and SHA-256+ for integrity.' },
+  { id: 'cors-wildcard', sev: 'medium', title: 'CORS open to every origin', re: /Access-Control-Allow-Origin['"]?\s*[:,]\s*['"]?\*|origin\s*:\s*['"]\*['"]/, advice: 'Restrict origins to known domains.' },
+  { id: 'tls-off', sev: 'high', title: 'TLS verification disabled', re: /rejectUnauthorized\s*:\s*false|verify\s*=\s*False|CURLOPT_SSL_VERIFYPEER\s*,\s*(?:false|0)|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0/, advice: 'Enable certificate verification.' },
+  { id: 'weak-random', sev: 'low', title: 'Math.random used for tokens / secrets', re: /(?:token|secret|password|key|session)[^\n]{0,40}Math\.random\(\)|Math\.random\(\)[^\n]{0,40}(?:token|secret|password|session)/i, advice: 'Use crypto.randomBytes / crypto.randomUUID.' },
+  { id: 'chmod-777', sev: 'medium', title: 'Permission 777', re: /chmod\s+(?:-R\s+)?777/, advice: 'Grant only the minimum permissions needed.' },
 ];
 
 const mask = (s) => s.replace(/(['"])([^'"\s]{3})[^'"\s]{3,}(['"])/g, '$1$2••••$3').replace(/(AKIA|ghp_|sk-|xox[bp]-)[A-Za-z0-9-]{4,}/g, '$1••••').replace(/(PRIVATE KEY-----).*/, '$1 ••••');
@@ -34,8 +34,8 @@ const mask = (s) => s.replace(/(['"])([^'"\s]{3})[^'"\s]{3,}(['"])/g, '$1$2•�
 async function scanSecurity(root) {
   const t0 = Date.now(), findings = [], counts = { high: 0, medium: 0, low: 0 };
   let scanned = 0, truncated = false, base;
-  try { base = await fs.promises.realpath(root); } catch { return { error: 'folder tidak ditemukan', findings: [], counts, scannedFiles: 0 }; }
-  if (base.toLowerCase() === HOME) return { skipped: true, note: 'Folder ini adalah folder Home pengguna, bukan sebuah project, jadi tidak dipindai.', findings: [], counts, scannedFiles: 0, scannedAt: Date.now() };
+  try { base = await fs.promises.realpath(root); } catch { return { error: 'folder-not-found', findings: [], counts, scannedFiles: 0 }; }
+  if (base.toLowerCase() === HOME) return { skipped: true, note: "This folder is the user's Home folder, not a project, so it was not scanned.", findings: [], counts, scannedFiles: 0, scannedAt: Date.now() };
   const files = [], queue = [base]; let envFile = false, gitignoreHasEnv = null, pkgIssues = [];
   while (queue.length && files.length < MAX_FILES && Date.now() - t0 < BUDGET_MS) {
     const dir = queue.shift();
@@ -75,8 +75,8 @@ async function scanSecurity(root) {
     }
     if (findings.length >= MAX_FINDINGS) { truncated = true; break; }
   }
-  if (envFile && gitignoreHasEnv === false) { counts.high++; findings.unshift({ sev: 'high', rule: 'env-not-ignored', title: 'File .env ada tetapi .gitignore tidak mengecualikannya', file: '.gitignore', line: 0, snippet: '', advice: 'Tambahkan .env ke .gitignore dan rotasi secret yang mungkin sudah ter-commit.' }); }
-  if (pkgIssues.length) { counts.low++; findings.push({ sev: 'low', rule: 'unpinned-deps', title: 'Dependensi tanpa versi terkunci: ' + [...new Set(pkgIssues)].slice(0, 5).join(', '), file: 'package.json', line: 0, snippet: '', advice: 'Kunci versi (semver) agar build bisa direproduksi.' }); }
+  if (envFile && gitignoreHasEnv === false) { counts.high++; findings.unshift({ sev: 'high', rule: 'env-not-ignored', title: 'A .env file exists but .gitignore does not exclude it', file: '.gitignore', line: 0, snippet: '', advice: 'Add .env to .gitignore and rotate any secret that may already be committed.' }); }
+  if (pkgIssues.length) { counts.low++; findings.push({ sev: 'low', rule: 'unpinned-deps', title: 'Dependencies without a pinned version', extra: [...new Set(pkgIssues)].slice(0, 5).join(', '), file: 'package.json', line: 0, snippet: '', advice: 'Pin versions (semver) so builds are reproducible.' }); }
   const order = { high: 0, medium: 1, low: 2 };
   findings.sort((a, b) => order[a.sev] - order[b.sev]);
   return { scannedFiles: scanned, durationMs: Date.now() - t0, scannedAt: Date.now(), counts, findings, truncated };

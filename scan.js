@@ -60,11 +60,11 @@ function toolTarget(tu) {
   if (f) return path.basename(f);
   return (str(i.command) || str(i.pattern) || str(i.description) || str(i.query) || str(i.url)).replace(/s+/g, ' ').slice(0, 28);
 }
-const TOOL_VERB = { Edit: 'Mengedit', Write: 'Menulis', MultiEdit: 'Mengedit', NotebookEdit: 'Mengedit', Read: 'Membaca', Grep: 'Mencari', Glob: 'Mencari',
-  Bash: 'Menjalankan', PowerShell: 'Menjalankan', Task: 'Mendelegasikan', Agent: 'Mendelegasikan', WebSearch: 'Riset web', WebFetch: 'Membaca web', TodoWrite: 'Merencanakan' };
+const TOOL_VERB = { Edit: 'Editing', Write: 'Writing', MultiEdit: 'Editing', NotebookEdit: 'Editing', Read: 'Reading', Grep: 'Searching', Glob: 'Searching',
+  Bash: 'Running', PowerShell: 'Running', Task: 'Delegating', Agent: 'Delegating', WebSearch: 'Web research', WebFetch: 'Reading web', TodoWrite: 'Planning' };   // English fallback; the UI localizes from activityTool / activityTarget
 function activityLabel(t) {
   if (!t || !t.name) return '';
-  const label = (TOOL_VERB[t.name] || 'Memakai ' + t.name) + (t.target ? ' ' + t.target : '');
+  const label = (TOOL_VERB[t.name] || 'Using ' + t.name) + (t.target ? ' ' + t.target : '');
   return label.length > 40 ? label.slice(0, 39) + '…' : label;
 }
 
@@ -187,6 +187,8 @@ function scanClaude(now) {
         id,
         attention, attentionAt: attention ? attentionAt : 0, lastText: attention ? lastText : '',
         activity: live && live.alive && live.status === 'busy' ? activityLabel(meta.lastTool) : '',
+        activityTool: live && live.alive && live.status === 'busy' && meta.lastTool ? meta.lastTool.name : '',
+        activityTarget: live && live.alive && live.status === 'busy' && meta.lastTool ? meta.lastTool.target || '' : '',
         lastReply: meta.lastReply || '',
         kind: 'claude',
         name: (live && live.name) || meta.title || id.slice(0, 8),
@@ -330,7 +332,7 @@ function projectSummary(world, key) {
   }
   const rank = { busy: 0, idle: 1, recent: 2, sleeping: 3 };
   const tasks = [...room.agents].sort((a, b) => (rank[a.status] - rank[b.status]) || b.lastActive - a.lastActive).slice(0, 12)
-    .map(a => ({ agent: a.name, status: a.status, title: a.title, activity: a.activity || '', reply: a.lastReply || '', lastActive: a.lastActive }));
+    .map(a => ({ agent: a.name, status: a.status, title: a.title, activity: a.activity || '', tool: a.activityTool || '', target: a.activityTarget || '', reply: a.lastReply || '', lastActive: a.lastActive }));
   return { key: room.key, name: room.name, path: room.path, docs: docs.slice(0, 3).map(d => ({ ...d, text: d.text.slice(0, 3500) })), tasks,
     stats: { agents: room.agents.length, live: room.liveCount, busy: room.busyCount } };
 }

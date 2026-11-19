@@ -41,7 +41,7 @@ function info(agent) {
   const supported = agent.kind === 'claude' && !agent.guard;
   const mb = (agent.sizeKB || 0) / 1024;
   return {
-    supported, reason: supported ? null : 'Hanya agent Claude Code yang bisa diajak ngobrol dari sini.',
+    supported, reason: supported ? null : 'not-supported',
     live: !!agent.live, forked: !!(c && c.forked), willFork: !!agent.live && !(c && c.forked), sizeMB: Math.round(mb), tooLarge: mb > MAX_RESUME_MB && !(c && c.forked),
     busy: active.has(agent.id), sessionId: c ? c.sessionId : agent.id,
   };
@@ -50,27 +50,27 @@ function info(agent) {
 // onEvent receives plain objects; returns { stop() } or throws { status, message }
 function startChat({ agent, message, mode = 'safe', branch = false }, onEvent, onDone) {
   const inf = info(agent);
-  if (!inf.supported) throw { status: 400, message: inf.reason };
-  if (active.has(agent.id)) throw { status: 409, message: 'Agent ini sedang membalas, tunggu sebentar.' };
-  if (active.size >= 2) throw { status: 429, message: 'Terlalu banyak percakapan berjalan bersamaan.' };
-  if (inf.tooLarge) throw { status: 413, message: `Riwayat sesi ini sangat besar (${inf.sizeMB} MB), melanjutkannya akan sangat lambat dan mahal.` };
+  if (!inf.supported) throw { status: 400, code: 'not-supported', message: 'Only Claude Code agents can be chatted with.' };
+  if (active.has(agent.id)) throw { status: 409, code: 'busy', message: 'This agent is still replying.' };
+  if (active.size >= 2) throw { status: 429, code: 'too-many', message: 'Too many conversations at once.' };
+  if (inf.tooLarge) throw { status: 413, code: 'too-large', mb: inf.sizeMB, message: `Session history is very large (${inf.sizeMB} MB).` };
   const text = String(message || '').trim().slice(0, MAX_MESSAGE);
-  if (!text) throw { status: 400, message: 'Pesan kosong.' };
-  let cwd = agent.cwd; try { if (!fs.statSync(cwd).isDirectory()) throw 0; } catch { throw { status: 400, message: 'Folder kerja agent tidak ditemukan.' }; }
+  if (!text) throw { status: 400, code: 'empty', message: 'The message is empty.' };
+  let cwd = agent.cwd; try { if (!fs.statSync(cwd).isDirectory()) throw 0; } catch { throw { status: 400, code: 'no-folder', message: 'Working folder not found.' }; }
 
   const c = chats[agent.id], target = c && c.sessionId ? c.sessionId : agent.id;
   const fork = !(c && c.forked) && (agent.live || branch);
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
     '--permission-mode', mode === 'edit' ? 'acceptEdits' : 'default', '--max-budget-usd', MAX_BUDGET_USD,
     '--resume', target, ...(fork ? ['--fork-session'] : []),
-    '--append-system-prompt', 'Kamu sedang diajak mengobrol lewat antarmuka kantor "Agent World". Jawab singkat dan jelas dalam bahasa pengguna. Jika tindakan butuh izin yang belum diberikan, katakan apa yang kamu butuhkan.'];
+    '--append-system-prompt', 'You are being talked to through the "Agent World" virtual-office interface. Answer briefly and clearly in the user\'s language. If an action needs a permission that was not granted, say what you need.'];
   const child = spawn(claudeBin(), args, { cwd, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   active.set(agent.id, child);
   child.stdin.on('error', () => {}); child.stdin.end(text);
 
   let buf = '', err = '', finished = false, sessionId = target, seenTools = new Set(), gotResult = false;
   const finish = (ev) => { if (finished) return; finished = true; clearTimeout(timer); active.delete(agent.id); if (ev) onEvent(ev); onDone && onDone(); };
-  const timer = setTimeout(() => { killTree(child); finish({ type: 'error', message: 'Waktu habis (10 menit).' }); }, TIMEOUT_MS);
+  const timer = setTimeout(() => { killTree(child); finish({ type: 'error', code: 'timeout', message: 'Timed out (10 minutes).' }); }, TIMEOUT_MS);
 
   const handle = (o) => {
     if (o.session_id && o.session_id !== sessionId) sessionId = o.session_id;
@@ -90,9 +90,9 @@ function startChat({ agent, message, mode = 'safe', branch = false }, onEvent, o
   };
   child.stdout.on('data', d => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (line) { try { handle(JSON.parse(line)); } catch { /* non-JSON noise */ } } } });
   child.stderr.on('data', d => { err = (err + d).slice(-800); });
-  child.on('error', e => finish({ type: 'error', message: 'Gagal menjalankan claude: ' + e.message }));
-  child.on('close', code => { if (!gotResult) finish({ type: 'error', message: err.trim() || `claude berhenti (kode ${code}).` }); });
-  return { stop() { killTree(child); finish({ type: 'error', message: 'Dihentikan.' }); } };
+  child.on('error', e => finish({ type: 'error', code: 'spawn-failed', detail: e.message, message: 'Could not run claude: ' + e.message }));
+  child.on('close', code => { if (!gotResult) finish({ type: 'error', code: 'cli-exit', detail: err.trim() || `exit code ${code}`, message: err.trim() || `claude exited (code ${code}).` }); });
+  return { stop() { killTree(child); finish({ type: 'error', code: 'stopped', message: 'Stopped.' }); } };
 }
 
 // ---------------------------------------------------------------------------
@@ -103,32 +103,34 @@ const SEC_TOOLS = 'Read,Grep,Glob';
 const SEC_DENY = ['Read(**/.env*)', 'Read(**/*.pem)', 'Read(**/*.key)', 'Read(**/id_rsa*)', 'Read(**/credentials*)', 'Grep(**/.env*)'];
 const NL = String.fromCharCode(10);
 
+const LANG_NAMES = { en: 'English', id: 'Indonesian', es: 'Spanish', ja: 'Japanese', zh: 'Simplified Chinese' };
 function securityBrief(room, report) {
-  if (!report || report.skipped) return 'Belum ada laporan pemindaian untuk project ini.';
+  if (!report || report.skipped) return 'There is no scan report for this project yet.';
   const c = report.counts || {};
-  const lines = (report.findings || []).slice(0, 40).map((f, i) => (i + 1) + '. [' + String(f.sev).toUpperCase() + '] ' + f.title + ' — ' + f.file + (f.line ? ':' + f.line : '') + (f.snippet ? ' — ' + String.fromCharCode(96) + String(f.snippet).slice(0, 110) + String.fromCharCode(96) : '') + ' — saran: ' + f.advice);
-  return 'Ringkasan: ' + (c.high || 0) + ' tinggi, ' + (c.medium || 0) + ' sedang, ' + (c.low || 0) + ' rendah (' + (report.scannedFiles || 0) + ' file dipindai' + (report.truncated ? ', hasil dipotong' : '') + ').' + NL + (lines.join(NL) || 'Tidak ada temuan dari aturan pemindai.');
+  const lines = (report.findings || []).slice(0, 40).map((f, i) => (i + 1) + '. [' + String(f.sev).toUpperCase() + '] ' + f.title + (f.extra ? ' (' + f.extra + ')' : '') + ' — ' + f.file + (f.line ? ':' + f.line : '') + (f.snippet ? ' — ' + String.fromCharCode(96) + String(f.snippet).slice(0, 110) + String.fromCharCode(96) : '') + ' — advice: ' + f.advice);
+  return 'Summary: ' + (c.high || 0) + ' high, ' + (c.medium || 0) + ' medium, ' + (c.low || 0) + ' low (' + (report.scannedFiles || 0) + ' files scanned' + (report.truncated ? ', results truncated' : '') + ').' + NL + (lines.join(NL) || 'The scanner rules found nothing.');
 }
 
-function startSecurityChat({ room, report, message, history = [] }, onEvent, onDone) {
+function startSecurityChat({ room, report, message, history = [], lang = '' }, onEvent, onDone) {
   const key = 'sec:' + room.key;
-  if (active.has(key)) throw { status: 409, message: 'Security sedang menjawab, tunggu sebentar.' };
-  if (active.size >= 2) throw { status: 429, message: 'Terlalu banyak percakapan berjalan bersamaan.' };
+  if (active.has(key)) throw { status: 409, code: 'sec-busy', message: 'Security is still answering.' };
+  if (active.size >= 2) throw { status: 429, code: 'too-many', message: 'Too many conversations at once.' };
   const text = String(message || '').trim().slice(0, MAX_MESSAGE);
-  if (!text) throw { status: 400, message: 'Pesan kosong.' };
-  if (report && report.skipped) throw { status: 400, message: report.note || 'Folder ini bukan project.' };
-  let cwd = room.path; try { if (!fs.statSync(cwd).isDirectory()) throw 0; } catch { throw { status: 400, message: 'Folder project tidak ditemukan.' }; }
+  if (!text) throw { status: 400, code: 'empty', message: 'The message is empty.' };
+  if (report && report.skipped) throw { status: 400, code: 'skipped', message: 'This folder is not a project.' };
+  let cwd = room.path; try { if (!fs.statSync(cwd).isDirectory()) throw 0; } catch { throw { status: 400, code: 'no-folder', message: 'Project folder not found.' }; }
 
+  const replyIn = LANG_NAMES[lang] ? 'Reply in ' + LANG_NAMES[lang] + '.' : "Reply in the language the user writes in.";
   const sys = [
-    'Kamu adalah "Security", penjaga keamanan untuk project "' + room.name + '" (folder kerja: ' + cwd + ') di kantor virtual Agent World.',
-    'Tugasmu: (1) menjelaskan dan memprioritaskan temuan celah keamanan, (2) memverifikasi temuan dengan MEMBACA kode jika perlu, (3) menulis PROMPT PERBAIKAN yang siap dilempar ke agent coding project ini.',
-    'Aturan: kamu hanya bisa membaca. Jangan mencoba mengubah file. Jangan membaca atau menampilkan file rahasia (.env, kunci privat, kredensial) dan jangan menuliskan nilai rahasia di jawaban. Temuan pemindai adalah heuristik (bisa salah), jadi verifikasi dulu bila ragu atau diminta. Tetap di folder project ini. Jawab ringkas dalam bahasa yang dipakai pengguna.',
-    'Format prompt perbaikan: tulis SATU blok kode (tiga backtick) yang mandiri, berisi: konteks singkat project, setiap masalah (file:baris, apa yang salah, perbaikan yang diharapkan), batasan (jangan ubah hal lain, jaga perilaku yang ada, jangan commit), cara memverifikasi (tes atau perintah), dan kriteria selesai. Jangan menaruh nilai rahasia di dalamnya. Setelah blok kode, beri satu kalimat penjelasan singkat.',
-    '', 'Laporan pemindaian statis terbaru (nilai rahasia sudah disamarkan):', securityBrief(room, report),
+    'You are "Security", the security guard of the project "' + room.name + '" (working folder: ' + cwd + ') in the virtual office Agent World.',
+    'Your job: (1) explain and prioritize the security findings, (2) verify findings by READING the code when needed, (3) write FIX PROMPTS that are ready to hand to this project\'s coding agent.',
+    'Rules: you can only read. Never try to change files. Never read or display secret files (.env, private keys, credentials) and never write secret values in your answers. The scanner findings are heuristics (they can be wrong), so verify first when in doubt or when asked. Stay inside this project folder. Be concise. ' + replyIn,
+    'Fix-prompt format: write ONE self-contained code block (three backticks) containing: a short project context, each problem (file:line, what is wrong, the expected fix), constraints (change nothing else, keep existing behaviour, do not commit), how to verify (tests or commands) and a done criterion. Do not put secret values in it. After the code block add one short explanatory sentence.',
+    '', 'Latest static scan report (secret values are already masked):', securityBrief(room, report),
   ].join(NL);
 
-  const past = (Array.isArray(history) ? history : []).slice(-12).map(h => (h && h.r === 'u' ? 'Pengguna: ' : 'Security: ') + String((h && h.t) || '').slice(0, 4000)).join(NL + NL);
-  const stdin = (past ? 'Percakapan sebelumnya:' + NL + past + NL + NL : '') + 'Pesan baru dari pengguna:' + NL + text;
+  const past = (Array.isArray(history) ? history : []).slice(-12).map(h => (h && h.r === 'u' ? 'User: ' : 'Security: ') + String((h && h.t) || '').slice(0, 4000)).join(NL + NL);
+  const stdin = (past ? 'Previous conversation:' + NL + past + NL + NL : '') + 'New message from the user:' + NL + text;
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--no-session-persistence', '--permission-mode', 'default',
     '--max-budget-usd', '1', '--tools', SEC_TOOLS, '--disallowedTools', ...SEC_DENY, '--append-system-prompt', sys];
   const child = spawn(claudeBin(), args, { cwd, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -136,7 +138,7 @@ function startSecurityChat({ room, report, message, history = [] }, onEvent, onD
 
   let buf = '', err = '', finished = false, gotResult = false; const seen = new Set();
   const finish = (ev) => { if (finished) return; finished = true; clearTimeout(timer); active.delete(key); if (ev) onEvent(ev); onDone && onDone(); };
-  const timer = setTimeout(() => { killTree(child); finish({ type: 'error', message: 'Waktu habis (10 menit).' }); }, TIMEOUT_MS);
+  const timer = setTimeout(() => { killTree(child); finish({ type: 'error', code: 'timeout', message: 'Timed out (10 minutes).' }); }, TIMEOUT_MS);
   const handle = (o) => {
     if (o.type === 'system' && o.subtype === 'init') onEvent({ type: 'init', forked: false, security: true });
     else if (o.type === 'stream_event' && o.event && o.event.type === 'content_block_delta' && o.event.delta && o.event.delta.type === 'text_delta') onEvent({ type: 'delta', text: o.event.delta.text });
@@ -145,9 +147,9 @@ function startSecurityChat({ room, report, message, history = [] }, onEvent, onD
   };
   child.stdout.on('data', d => { buf += d; let i; while ((i = buf.indexOf(NL)) >= 0) { const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (line) { try { handle(JSON.parse(line)); } catch { /* noise */ } } } });
   child.stderr.on('data', d => { err = (err + d).slice(-800); });
-  child.on('error', e => finish({ type: 'error', message: 'Gagal menjalankan claude: ' + e.message }));
-  child.on('close', code => { if (!gotResult) finish({ type: 'error', message: err.trim() || 'claude berhenti (kode ' + code + ').' }); });
-  return { stop() { killTree(child); finish({ type: 'error', message: 'Dihentikan.' }); } };
+  child.on('error', e => finish({ type: 'error', code: 'spawn-failed', detail: e.message, message: 'Could not run claude: ' + e.message }));
+  child.on('close', code => { if (!gotResult) finish({ type: 'error', code: 'cli-exit', detail: err.trim() || 'exit code ' + code, message: err.trim() || 'claude exited (code ' + code + ').' }); });
+  return { stop() { killTree(child); finish({ type: 'error', code: 'stopped', message: 'Stopped.' }); } };
 }
 
 module.exports = { startChat, startSecurityChat, info, forkIds };

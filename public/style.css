@@ -183,3 +183,27 @@ ol.plain li small { display: block; color: var(--muted); }
 .agentmenu small { color: var(--muted); }
 .agentmenu button { text-align: left; padding: 4px 8px; font-size: 12px; }
 .msg.a .bub { max-width: 100%; }
+
+/* ---- language / settings ---- */
+.legend em { font-style: normal; }
+.langlist { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.lang { text-align: left; padding: 10px 14px; font-size: 14px; }
+.lang.on { border-color: var(--recent); color: var(--recent); background: rgba(74,168,255,.1); }
+
+/* side panels sit right below the header, however many rows it wraps to (set from main.js) */
+@media (min-width: 761px) {
+  .rooms, .detail { top: calc(var(--bar-b, 56px) + 10px) !important; max-height: calc(100% - var(--bar-b, 56px) - 70px) !important; }
+}
+
+/* ---- cleaner header + settings menus ---- */
+.settingsbtn { margin-left: auto; }
+.tabs { display: flex; gap: 6px; margin: 10px 0 4px; border-bottom: 1px solid var(--line); }
+.tab { border-radius: 8px 8px 0 0; border-bottom: none; padding: 7px 14px; background: transparent; }
+.tab.on { background: rgba(74,168,255,.14); border-color: var(--recent); color: var(--recent); }
+table.keys { width: 100%; border-collapse: collapse; }
+table.keys td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.keys td:first-child { white-space: nowrap; width: 1%; }
+kbd { background: rgba(255,255,255,.08); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: 2px 8px; font: 12px/1.4 ui-monospace, Consolas, monospace; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.actions button.on { border-color: var(--recent); color: var(--recent); }
+.checkrow { display: flex; gap: 8px; align-items: center; color: var(--text); cursor: pointer; }

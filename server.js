@@ -69,16 +69,16 @@ function handle(req, res) {
 
   if (pathname === '/api/agent') {            // achievements: outline of what the agent has worked on
     const hit = findAgent(lastWorld, q.get('id') || '');
-    if (!hit) return json(404, { error: 'agent tidak ditemukan' });
+    if (!hit) return json(404, { error: 'agent not found' });
     achievementsSeen.set(hit.agent.id, Date.now());
     const file = getTranscriptPath(hit.agent.id);
-    if (!file) return json(200, { id: hit.agent.id, name: hit.agent.name, tasks: [], topics: [], counts: {}, totalPrompts: 0, note: 'Tidak ada riwayat transkrip untuk agent ini.' });
+    if (!file) return json(200, { id: hit.agent.id, name: hit.agent.name, tasks: [], topics: [], counts: {}, totalPrompts: 0, noTranscript: true });
     agentHistory(file).then(r => json(200, { id: hit.agent.id, name: hit.agent.name, ...r }), e => json(500, { error: e.message }));
     return;
   }
   if (pathname === '/api/security') {         // security review of a project folder
     const room = lastWorld && lastWorld.rooms.find(r => r.key === (q.get('key') || ''));
-    if (!room) return json(404, { error: 'project tidak ditemukan' });
+    if (!room) return json(404, { error: 'project not found' });
     if (q.get('cached') === '1') return json(200, { key: room.key, report: securityCached(room.path) });
     securityReport(room.path, q.get('force') === '1').then(r => json(200, { key: room.key, name: room.name, path: room.path, report: r }), e => json(500, { error: e.message }));
     return;
@@ -92,8 +92,8 @@ function handle(req, res) {
       let id; try { id = String(JSON.parse(body).id || ''); } catch { return json(400, { error: 'bad json' }); }
       if (pathname === '/api/unfire') { delete fired[id]; saveFired(); return json(200, { ok: true }); }
       const hit = findAgent(lastWorld, id);
-      if (!hit) return json(404, { error: 'agent tidak ditemukan' });
-      if (Date.now() - (achievementsSeen.get(id) || 0) > 15 * 60 * 1000) return json(409, { error: 'achievements-not-viewed', message: 'Lihat pencapaian agent ini dulu sebelum memecatnya.' });
+      if (!hit) return json(404, { error: 'agent not found' });
+      if (Date.now() - (achievementsSeen.get(id) || 0) > 15 * 60 * 1000) return json(409, { error: 'achievements-not-viewed', message: 'Look at this agent\'s achievements before firing it.' });
       fired[id] = { name: hit.agent.name, cwd: hit.agent.cwd, project: hit.room.name, firedAt: Date.now() };
       saveFired(); achievementsSeen.delete(id); refresh(); return json(200, { ok: true });
     });
@@ -102,7 +102,7 @@ function handle(req, res) {
 
   if (pathname === '/api/chat/info') {        // can we talk to this agent, and how?
     const hit = findAgent(lastWorld, q.get('id') || '');
-    return hit ? json(200, chatInfo(hit.agent)) : json(404, { error: 'agent tidak ditemukan' });
+    return hit ? json(200, chatInfo(hit.agent)) : json(404, { error: 'agent not found' });
   }
   if (pathname === '/api/chat' && req.method === 'POST') {   // streams the agent's reply as NDJSON
     if (req.headers['x-aw'] !== '1' || (req.headers.origin && !ORIGINS.has(req.headers.origin))) return json(403, { error: 'forbidden' });
@@ -110,7 +110,7 @@ function handle(req, res) {
     req.on('end', () => {
       let b; try { b = JSON.parse(body); } catch { return json(400, { error: 'bad json' }); }
       const hit = findAgent(lastWorld, String(b.id || ''));
-      if (!hit) return json(404, { error: 'agent tidak ditemukan' });
+      if (!hit) return json(404, { error: 'agent not found' });
       res.writeHead(200, { ...SEC, 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' });
       const out = (ev) => { try { res.write(JSON.stringify(ev) + String.fromCharCode(10)); } catch { /* client left */ } };
       let handle;
@@ -127,12 +127,12 @@ function handle(req, res) {
     req.on('end', async () => {
       let b; try { b = JSON.parse(body); } catch { return json(400, { error: 'bad json' }); }
       const room = lastWorld && lastWorld.rooms.find(r => r.key === String(b.key || ''));
-      if (!room) return json(404, { error: 'project tidak ditemukan' });
+      if (!room) return json(404, { error: 'project not found' });
       let report = null; try { report = await securityReport(room.path, false); } catch { /* chat without a report */ }
       res.writeHead(200, { ...SEC, 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' });
       const out = (ev) => { try { res.write(JSON.stringify(ev) + String.fromCharCode(10)); } catch { /* client left */ } };
       let handle;
-      try { handle = startSecurityChat({ room, report, message: b.message, history: b.history }, out, () => res.end()); }
+      try { handle = startSecurityChat({ room, report, message: b.message, history: b.history, lang: String(b.lang || '') }, out, () => res.end()); }
       catch (e) { out({ type: 'error', status: e.status || 500, message: e.message || String(e) }); return res.end(); }
       res.on('close', () => { if (!res.writableEnded) handle.stop(); });
     });

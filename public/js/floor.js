@@ -1,6 +1,6 @@
 // One building floor in 2D: 3 project rooms + fun area + toilet (+ lift lobby, and the human's office on floor 2).
 // Builds the layout, the things to draw, collision boxes, and the walking routes.
-import { G, P, dist, hash, ROLES, STATUS, trunc } from './core.js';
+import { G, P, dist, hash, ROLES, STATUS, trunc, t, actText } from './core.js';
 import * as S from './shapes.js';
 
 export const USER_FLOOR = 2;
@@ -118,13 +118,13 @@ export function buildFloor(floorNo, projectRooms, ctx) {
     r.lanes = LANE_OFFSETS.map(o => r.cx + o);
     if (!room) {
       roomFloor(r, '#6d7690', 'carpet'); walls(r, '#5b6580');
-      add(r.cz, c => S.pill(c, 'Ruang kosong', r.cx, r.cz, 0.7, { sub: 'belum ada project', fg: '#8b95b0' }));
+      add(r.cz, c => S.pill(c, t('room.empty'), r.cx, r.cz, 0.7, { sub: t('room.empty.sub'), fg: '#8b95b0' }));
       return;
     }
     floor.projectRooms.push(room); r.data = room; room.rd = r;
     const hue = hash(room.name) % 360, role = ROLES[room.role] || ROLES.casual, wallCol = `hsl(${hue} 45% 42%)`;
     roomFloor(r, `hsl(${hue} 22% 62%)`, 'carpet'); walls(r, wallCol);
-    sign(r, room.name, `${role.label} · ${room.agents.length} agent · ${room.liveCount} online`, `hsl(${hue} 80% 75%)`);
+    sign(r, room.name, t('room.projsub', { role: role.label, agents: room.agents.length, live: room.liveCount }), `hsl(${hue} 80% 75%)`);
 
     // wall monitor: click => task / PRD summary
     const ordered = [...room.agents].sort((a, b) => (a.status === 'busy' ? 0 : 1) - (b.status === 'busy' ? 0 : 1));
@@ -135,8 +135,8 @@ export function buildFloor(floorNo, projectRooms, ctx) {
       S.text(c, trunc(room.name, 30), bx + 0.25, bz + 0.26, 0.38, '#e8ecf8', 'left', 700);
       S.text(c, trunc(`${role.label} · ${role.desc}`, 40), bx + bw - 0.2, bz + 0.26, 0.26, '#8b95b0', 'right', 500);
       ordered.slice(0, 3).forEach((a, i) => { c.fillStyle = STATUS[a.status].color; c.beginPath(); c.arc(bx + 0.3, bz + 0.85 + i * 0.36, 0.09, 0, 7); c.fill(); S.text(c, trunc(a.title || a.name, 52), bx + 0.55, bz + 0.85 + i * 0.36, 0.28, '#dfe6f7', 'left', 600); });
-      if (!ordered.length) S.text(c, 'Belum ada task.', bx + 0.3, bz + 0.9, 0.3, '#6b7590', 'left');
-      S.box(c, bx, bz + bh - 0.36, bw, 0.36, '#ffb020', { r: 0.06 }); S.text(c, 'KLIK: RINGKASAN TASK / PRD', bx + bw / 2, bz + bh - 0.18, 0.26, '#1c1300', 'center', 700);
+      if (!ordered.length) S.text(c, t('board.none'), bx + 0.3, bz + 0.9, 0.3, '#6b7590', 'left');
+      S.box(c, bx, bz + bh - 0.36, bw, 0.36, '#ffb020', { r: 0.06 }); S.text(c, t('board.click'), bx + bw / 2, bz + bh - 0.18, 0.26, '#1c1300', 'center', 700);
     });
     floor.clicks.push({ type: 'board', x0: bx, z0: bz, x1: bx + bw, z1: bz + bh, key: room.key });
     obs(bx, r.z0, bx + bw, bz + bh + 0.2);
@@ -170,7 +170,7 @@ export function buildFloor(floorNo, projectRooms, ctx) {
   // ---------- fun area ----------
   {
     const r = Pl.fun, L = (lx, lz) => P(r.cx + lx, r.cz + lz);
-    roomFloor(r, '#8fb86a', 'carpet'); walls(r, '#5f8f46'); sign(r, 'Fun Area', 'santai · ngopi · pingpong', '#b6f09f');
+    roomFloor(r, '#8fb86a', 'carpet'); walls(r, '#5f8f46'); sign(r, t('room.fun'), t('room.fun.sub'), '#b6f09f');
     const ppx = r.cx - 4, ppz = r.cz + 1; floor.pingpong = { x: ppx, z: ppz, ball: null };
     add(ppz + 1.4, c => S.pingpong(c, ppx, ppz, floor.pingpong.ball)); obs(ppx - 0.95, ppz - 1.4, ppx + 0.95, ppz + 1.4);
     add(r.cz + 0.7, c => S.sofa(c, r.cx + 6, r.cz + 0.2, 3.0, '#8c5b4a', 'north')); add(r.cz + 4.9, c => S.sofa(c, r.cx + 6, r.cz + 4.4, 3.0, '#4a5b8c', 'south'));
@@ -178,7 +178,7 @@ export function buildFloor(floorNo, projectRooms, ctx) {
     obs(r.cx + 4.4, r.cz - 0.4, r.cx + 7.6, r.cz + 0.8); obs(r.cx + 4.4, r.cz + 3.8, r.cx + 7.6, r.cz + 5.0); obs(r.cx + 5.1, r.cz + 1.9, r.cx + 6.9, r.cz + 2.7);
     add(r.cz - 3.0, c => S.coffeeMachine(c, r.cx - 8.3, r.cz - 3.5)); obs(r.cx - 9, r.cz - 4.1, r.cx - 7.7, r.cz - 2.9);
     for (const [x, z] of [[-8.2, 5.2], [8.2, -5.2], [0, 5.3]]) add(r.cz + z + 0.3, c => S.plant(c, r.cx + x, r.cz + z, 1.1));
-    add(r.z0 + 0.1, c => { S.box(c, r.cx + 1, r.z0 + 0.3, 5, 0.5, '#2a86c9', { r: 0.06 }); S.text(c, '▶ FUN AREA', r.cx + 3.5, r.z0 + 0.55, 0.3, '#fff', 'center', 700); });
+    add(r.z0 + 0.1, c => { S.box(c, r.cx + 1, r.z0 + 0.3, 5, 0.5, '#2a86c9', { r: 0.06 }); S.text(c, t('room.fun.tv'), r.cx + 3.5, r.z0 + 0.55, 0.3, '#fff', 'center', 700); });
     const mk = (lx, lz, yaw, pose) => ({ pos: L(lx, lz), yaw, pose });
     floor.slots.fun = {
       room: r, order: ['pp0', 'pp1', 'chatL', 'chatR', 'coffee', 'sofaA0', 'sofaB0', 'sofaA1', 'sofaB1', 'sofaA2', 'sofaB2'],
@@ -196,7 +196,7 @@ export function buildFloor(floorNo, projectRooms, ctx) {
   // ---------- toilet ----------
   {
     const r = Pl.toilet, L = (lx, lz) => P(r.cx + lx, r.cz + lz);
-    roomFloor(r, '#cfe0ea', 'tile'); walls(r, '#4f8fae'); sign(r, 'Toilet', 'WC', '#9fd8ff');
+    roomFloor(r, '#cfe0ea', 'tile'); walls(r, '#4f8fae'); sign(r, t('room.toilet'), t('room.toilet.sub'), '#9fd8ff');
     const stallX = [-3.4, -0.9, 1.6];
     for (const x of [-4.6, -2.15, 0.35, 2.8]) add(r.cz + 4.9, c => S.box(c, r.cx + x - 0.05, r.cz + 2.4, 0.1, 2.6, '#7aa6bd', { r: 0.02 }));
     stallX.forEach(x => { add(r.cz + 4.6, c => S.toilet(c, r.cx + x, r.cz + 4.55)); add(r.cz + 2.65, c => { S.box(c, r.cx + x - 1.0, r.cz + 2.55, 0.5, 0.1, '#9bc3d6', { r: 0.02 }); S.box(c, r.cx + x + 0.5, r.cz + 2.55, 0.5, 0.1, '#9bc3d6', { r: 0.02 }); }); });
@@ -216,21 +216,21 @@ export function buildFloor(floorNo, projectRooms, ctx) {
       const o = floor.lift.open, dw = 1.5;
       S.box(c, r.cx - dw - o * 1.05, r.z0 - 0.15, dw, 0.3, '#aab6cc', { r: 0.03, stroke: '#6e7a93' }); S.box(c, r.cx + o * 1.05, r.z0 - 0.15, dw, 0.3, '#aab6cc', { r: 0.03, stroke: '#6e7a93' });
       S.box(c, r.x1 - 0.8, r.cz - 0.5, 0.35, 1.0, '#20263a', { r: 0.05 }); for (let i = 0; i < 4; i++) S.circle(c, r.x1 - 0.62, r.cz - 0.35 + i * 0.23, 0.06, i === 1 ? '#4aa8ff' : '#6e7a93');
-      S.text(c, 'LIFT', r.cx, r.cz + 0.1, 0.5, 'rgba(255,255,255,.45)', 'center', 700);
+      S.text(c, t('room.lift.label'), r.cx, r.cz + 0.1, 0.5, 'rgba(255,255,255,.45)', 'center', 700);
     });
-    sign(r, `LANTAI ${floorNo}`, 'lift', '#ffe08a');
+    sign(r, t('room.floor', { n: floorNo }), t('room.lift.sub'), '#ffe08a');
   }
 
   // ---------- the human's office (floor 2) or a lounge ----------
   if (Pl.office) {
     const r = Pl.office, waiting = ctx.waiting || [];
-    roomFloor(r, '#8b6a47', 'wood'); walls(r, '#a8864f'); sign(r, 'Ruang Anda', 'lantai 2 · kantor pribadi', '#f1cf7a');
+    roomFloor(r, '#8b6a47', 'wood'); walls(r, '#a8864f'); sign(r, t('room.office'), t('room.office.sub', { n: USER_FLOOR }), '#f1cf7a');
     ground(c => S.rug(c, r.cx, r.cz + 0.6, 4.2, 2.8, '#1f4f5c'));
     const dx = r.cx, dz = r.cz - 1.2;
     add(dz + 0.7, c => {
       S.box(c, dx - 1.8, dz - 0.6, 3.6, 1.2, '#5b3f2b', { r: 0.08, stroke: '#3c281b' });
       S.box(c, dx - 1.55, dz - 0.5, 1.2, 0.18, '#0a0d16', { r: 0.04 }); S.box(c, dx + 0.35, dz - 0.5, 1.2, 0.18, '#0a0d16', { r: 0.04 });
-      S.text(c, `INBOX ${waiting.length}`, dx - 0.95, dz - 0.02, 0.3, waiting.length ? '#ffb020' : '#6b7590', 'center', 700); S.text(c, 'ANDA', dx + 0.95, dz - 0.02, 0.3, '#d8b25a', 'center', 700);
+      S.text(c, t('desk.inbox', { n: waiting.length }), dx - 0.95, dz - 0.02, 0.3, waiting.length ? '#ffb020' : '#6b7590', 'center', 700); S.text(c, t('desk.you'), dx + 0.95, dz - 0.02, 0.3, '#d8b25a', 'center', 700);
     });
     obs(dx - 1.9, dz - 0.7, dx + 1.9, dz + 0.7);
     add(dz + 0.5, c => S.chair(c, dx, dz + 1.4, 1.25));
@@ -242,7 +242,7 @@ export function buildFloor(floorNo, projectRooms, ctx) {
     const r = mkRoom('lounge', 23, 10, 22, 12, 'south');
     for (const x of [18, 28]) { add(12.5, c => S.sofa(c, x, 12, 3, '#5a6a99', 'south')); obs(x - 1.6, 11.4, x + 1.6, 12.8); }
     for (const [x, z] of [[12, 6], [34, 6], [34, 15], [12, 15]]) add(z + 0.3, c => S.plant(c, x, z, 1.3));
-    add(r.cz, c => S.pill(c, 'Lobi lantai ' + floorNo, r.cx, r.cz, 0.7, { fg: '#cfd8ee' }));
+    add(r.cz, c => S.pill(c, t('room.lobby', { n: floorNo }), r.cx, r.cz, 0.7, { fg: '#cfd8ee' }));
   }
 
   floor.allRooms = [...Pl.projects.filter(r => r.data), Pl.fun, Pl.toilet, Pl.lift, ...(Pl.office ? [Pl.office] : []), ...Pl.projects.filter(r => !r.data)];

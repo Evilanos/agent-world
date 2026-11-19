@@ -1,5 +1,5 @@
 // Agents and security guards: where they sit, what they do, and how they walk between rooms.
-import { G, P, dist, hash, STATUS, KIND, trunc, damp, wrapAngle, reduceMotion } from './core.js';
+import { G, P, dist, hash, STATUS, KIND, trunc, damp, wrapAngle, reduceMotion, t } from './core.js';
 import { route } from './floor.js';
 
 export const actorStates = new Map();   // id -> { pos, route, ri, goalKey, floorNo, target }  (survives scene rebuilds)
@@ -24,12 +24,12 @@ export function createActors(floor) {
     }
     const gp = floor.guardPosts[room.key];
     if (gp) {
-      const g = { id: 'guard:' + room.key, name: 'Security', status: 'idle', kind: 'security', title: 'Security · ' + room.name, cwd: room.path, activity: '', subagents: [], subagentTotal: 0, subagentWorking: 0, lastActive: Date.now(), guard: true, projectKey: room.key, projectName: room.name };
+      const g = { id: 'guard:' + room.key, name: t('guard.name'), status: 'idle', kind: 'security', title: t('guard.title', { name: room.name }), cwd: room.path, activity: '', subagents: [], subagentTotal: 0, subagentWorking: 0, lastActive: Date.now(), guard: true, projectKey: room.key, projectName: room.name };
       guards.push(makeActor(floor, g, { home: gp.post.pos, roomKey: room.key, role: 'security', guard: true }));
     }
   }
   const fun = floor.slots.fun;
-  const fg = { id: 'guard:fun', name: 'Security', status: 'idle', kind: 'security', title: 'Security · Fun Area', cwd: '', activity: '', subagents: [], subagentTotal: 0, lastActive: Date.now(), guard: true, projectKey: null, projectName: 'Fun Area' };
+  const fg = { id: 'guard:fun', name: t('guard.name'), status: 'idle', kind: 'security', title: t('guard.title', { name: t('room.fun') }), cwd: '', activity: '', subagents: [], subagentTotal: 0, lastActive: Date.now(), guard: true, projectKey: null, projectName: t('room.fun') };
   guards.push(makeActor(floor, fg, { home: fun.patrol[0], roomKey: 'fun', role: 'security', guard: true }));
   return { agents, guards };
 }
@@ -118,13 +118,13 @@ function planFrame(floor) {
     }
     if (g.roomKey === 'fun') {
       const mixed = groups.size >= 2, pts = fun.patrol, i = Math.floor(T / 9) % pts.length;
-      goals.set(g.agent.id, { key: 'patrol' + i, pos: pts[i], yaw: i ? Math.PI : 0, pose: 'guard', bubble: mixed ? '👀 awasi lintas project' : '' });
+      goals.set(g.agent.id, { key: 'patrol' + i, pos: pts[i], yaw: i ? Math.PI : 0, pose: 'guard', bubble: mixed ? t('guard.watch') : '' });
       continue;
     }
     const gp = floor.guardPosts[g.roomKey]; if (!gp) continue;
     const rep = G.security[g.roomKey], tm = (T + hash(g.roomKey)) % 70, n = rep && rep.counts ? rep.counts.high + rep.counts.medium + rep.counts.low : null;
-    if (blockers.get(g.roomKey)) goals.set(g.agent.id, { key: 'block', pos: gp.block.pos, yaw: 0, pose: 'stop', bubble: '🚫 Beda project!' });
-    else if (tm < 26) goals.set(g.agent.id, { key: 'inspect', pos: gp.console.pos, yaw: gp.console.yaw, pose: 'inspect', bubble: rep ? (rep.skipped ? '🔍 bukan project' : `🔍 ${n} temuan`) : '🔍 memindai…' });
+    if (blockers.get(g.roomKey)) goals.set(g.agent.id, { key: 'block', pos: gp.block.pos, yaw: 0, pose: 'stop', bubble: t('guard.block') });
+    else if (tm < 26) goals.set(g.agent.id, { key: 'inspect', pos: gp.console.pos, yaw: gp.console.yaw, pose: 'inspect', bubble: rep ? (rep.skipped ? t('guard.skipped') : t('guard.findings', { n })) : t('guard.scanning') });
     else goals.set(g.agent.id, { key: 'post', pos: gp.post.pos, yaw: gp.post.yaw, pose: 'guard', bubble: '' });
   }
   return goals;

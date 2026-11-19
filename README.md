@@ -8,7 +8,7 @@ You get your own character to walk around with, can read what each agent has ach
 
 Everything runs **locally** on your machine. There is nothing to sign up for, no cloud service, and **no npm dependencies**.
 
-> The interface text is currently in Indonesian (Bahasa Indonesia). The code, the API and this documentation are in English. Translations / an i18n layer are welcome contributions.
+> **Languages:** the interface is available in **English, Bahasa Indonesia, Español, 日本語 and 简体中文**. Pick one under **⚙ Settings → Language** (it applies instantly and is remembered). On first launch it follows your browser language. See [Adding a language](#adding-a-language).
 
 ```
 ┌──────────────┬──────────────┬──────────────┐
@@ -81,7 +81,14 @@ Each floor has 3 project rooms. If you have more projects, extra floors appear a
 | Walk into the lift | Pick a floor (or press `1`-`9`) |
 | `Esc` | Close panels |
 
-Header buttons: **Follow character**, **View whole floor**, **Fired** (restore dismissed agents) and **Demo calls** (previews agents walking over to you, useful the first time you try it).
+The header is kept minimal (title, floor, live statistics and a **⚙ Settings** button). Settings has two menus:
+
+- **Controller**: the full list of keyboard and mouse controls, plus the view options: *Follow character*, *View whole floor*, *Show sleeping agents*, *Fired* (restore dismissed agents) and *Demo calls* (previews agents walking over to you, useful the first time you try it).
+- **Language**: choose the interface language.
+
+Two shortcuts also work without opening the menu: `C` (follow character) and `O` (view the whole floor).
+
+Only the application's own texts are translated. Things that come from your agents (session titles, your prompts, agent replies, file names) are shown as they are. In the Security chat the guard answers in the language you selected.
 
 ### Achievements and firing
 
@@ -98,7 +105,7 @@ Every project room has a security guard and so does the Fun Area. They do two th
 
 ## Chatting with agents
 
-Click an agent and press the **💬** button at the top of its panel (labelled "Ngobrol / beri perintah" in the Indonesian UI). Replies stream in like a normal chat, and the agent walks over to talk to you.
+Click an agent and press the **💬 Chat / give commands** button at the top of its panel. Replies stream in like a normal chat, and the agent walks over to talk to you.
 
 It works by running the Claude Code CLI headlessly in the agent's folder (`claude -p --resume <session>`), so you need the `claude` command installed and logged in.
 
@@ -222,18 +229,33 @@ public/
   js/shapes.js   2D primitives, furniture, bot and human sprites
   js/player.js   Your character and collisions
   js/chat.js     Chat panel
+  js/i18n.js     Language list, t() and live switching
+  js/lang/       One dictionary per language (en, id, es, ja, zh)
+scripts/check-i18n.js   Dictionary consistency checker (npm run check:i18n)
 ```
 
 ## Contributing
 
-Issues and pull requests are welcome. Good first areas: more agent sources (Copilot CLI, Codex, OpenCode, ...), macOS / Linux testing, translating the UI strings, and new outfits / rooms.
+Issues and pull requests are welcome. Good first areas: more agent sources (Copilot CLI, Codex, OpenCode, ...), macOS / Linux testing, new languages, and new outfits / rooms.
 
 There are no build tools. Edit the files and reload the page.
+
+### Adding a language
+
+All user-facing text lives in dictionaries under `public/js/lang/` (`en.js` is the reference, with `{placeholders}` that must be kept).
+
+1. Copy `public/js/lang/en.js` to `public/js/lang/<code>.js` (for example `fr.js`) and translate the values.
+2. Register it in `public/js/i18n.js`: add the `import` and a line in `LANGS` (`code`, display `name`, `locale` for dates/numbers, and `ai`, the English name of the language, which is passed to the AI so Security replies in it).
+3. Run `npm run check:i18n`. It verifies that every language has exactly the same keys and placeholders as `en.js` and that every key used in the code exists.
+
+Missing keys fall back to English, so a partial translation still works. The server never sends user-facing prose: it returns codes and neutral data (tool names, rule ids), and the browser translates them.
 
 Developer URL parameters (none of them send messages or change data by themselves):
 
 | Parameter | Effect |
 |---|---|
+| `?lang=en\|id\|es\|ja\|zh` | Use a language for this page load (the saved choice is not changed) |
+| `?modal=controller\|language` | Open the settings menu on that tab |
 | `?floor=N` | Start on floor N |
 | `?room=fun\|toilet\|lift\|office\|p0\|p1\|p2\|me` | Focus a room, or your character |
 | `?sim=SECONDS` | Fast-forward the simulation |
