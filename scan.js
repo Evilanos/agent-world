@@ -253,14 +253,22 @@ function scanAntigravity(now) {
 function scan() {
   const now = Date.now();
   const byId = new Map();
-  for (const a of [...safe(() => scanClaude(now), []), ...safe(() => scanAntigravity(now), [])]) {
+  const first = [...safe(() => scanClaude(now), []), ...safe(() => scanAntigravity(now), [])];
+  // every other tool: built-in adapters, user-configured adapters and running processes (see adapters/)
+  const extra = safe(() => require('./adapters').runAdapters(now, { knownCwds: [...new Set(first.map(a => a.cwd).filter(Boolean))] }), []);
+  for (const a of [...first, ...extra]) {
     const prev = byId.get(a.id); // resumed/forked copies share an id: keep the newest
     if (!prev || a.lastActive > prev.lastActive) byId.set(a.id, a);
   }
-  const agents = [...byId.values()].filter(a => typeof a.cwd === 'string' && a.cwd && !FIRED.has(a.id) && !HIDDEN.has(a.id));
+  const agents = [...byId.values()].filter(a => ((typeof a.cwd === 'string' && a.cwd) || a.unknownFolder) && !FIRED.has(a.id) && !HIDDEN.has(a.id));
 
   const rooms = new Map();
   for (const a of agents) {
+    if (!a.cwd) {   // the tool does not tell us the project folder: one room per tool
+      const k = 'unknown:' + a.kind;
+      if (!rooms.has(k)) rooms.set(k, { key: k, path: '', name: a.kindLabel || a.kind, unknown: true, agents: [] });
+      rooms.get(k).agents.push(a); continue;
+    }
     // Orca worktrees (...\orca\workspaces\<Project>\<worktree>) belong to their parent project room
     const wt = a.cwd.match(/[\\/]orca[\\/]workspaces[\\/]([^\\/]+)[\\/]([^\\/]+)/i);
     let key, name, p = a.cwd;
@@ -322,10 +330,10 @@ function projectSummary(world, key) {
   const room = world && world.rooms.find(r => r.key === key);
   if (!room) return null;
   const docs = [];
-  for (const group of DOC_GROUPS) {
+  for (const group of (room.path ? DOC_GROUPS : [])) {
     for (const rel of group) { const d = readDoc(room.path, rel); if (d) { docs.push(d); break; } }
   }
-  if (!docs.some(d => /prd|requirement/i.test(d.name))) { // any docs/*prd*.md or *spec*.md
+  if (room.path && !docs.some(d => /prd|requirement/i.test(d.name))) { // any docs/*prd*.md or *spec*.md
     const dd = path.join(room.path, 'docs');
     const hit = safe(() => fs.readdirSync(dd), []).find(f => /(prd|spec|requirement)/i.test(f) && /.(md|txt)$/i.test(f));
     const d = hit && readDoc(room.path, 'docs/' + hit); if (d) docs.unshift(d);

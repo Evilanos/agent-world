@@ -44,6 +44,7 @@ export default {
   'room.office': 'Ruang Anda', 'room.office.sub': 'lantai {n} · kantor pribadi',
   'room.lobby': 'Lobi lantai {n}',
   'room.empty': 'Ruang kosong', 'room.empty.sub': 'belum ada project',
+  'room.unknown': '{tool} (folder tidak diketahui)',
   'room.projsub': '{role} · {agents} agent · {live} online',
   'board.none': 'Belum ada task.', 'board.click': 'KLIK: RINGKASAN TASK / PRD',
   'desk.inbox': 'INBOX {n}', 'desk.you': 'ANDA',
@@ -189,4 +190,27 @@ export default {
   "ctl.k.lift": "Masuk lift",
   "ctl.lift": "Pilih lantai lain (atau tekan 1-9)",
   "ctl.close": "Tutup panel",
+
+  // ---- project dropdown / call ----
+  "side.call": "Panggil",
+  "side.callTip": "Minta agent ini datang ke Anda",
+  "side.back": "Kembali",
+  "side.backTip": "Suruh agent ini kembali ke tempat semula",
+  "side.more": "+{n} lainnya tidak ditampilkan",
+  "side.agentsAria": "Agent di {name}",
+  "p.callMe": "📞 Panggil ke sini",
+  "p.sendBack": "↩ Suruh kembali",
+  "summon.bubble": "🙋 Ya, Bos?",
+  "ctl.k.card": "Klik kartu project",
+  "ctl.card": "Buka daftar agent; 📞 Panggil membuat agent datang ke Anda",
+
+  // ---- floor browser ----
+  "fl.here": "Anda di lantai {n}",
+  "fl.viewing": "Melihat lantai {n}",
+  "fl.menu": "Pilih lantai untuk dilihat",
+  "fl.you": "Anda di sini",
+  "fl.note": "Agent yang Anda panggil dari sini datang lewat lift.",
+  "side.traveling": "🛗 dalam perjalanan lewat lift…",
+  "side.floorEmpty": "Tidak ada project di lantai ini.",
+  "p.floor": "Lantai",
 };

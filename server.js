@@ -36,6 +36,7 @@ function refresh() {
   try { lastWorld = scan(); cache = { json: JSON.stringify(lastWorld), at: Date.now(), error: null }; }
   catch (e) { cache.error = e.message; console.error('scan failed:', e.message); }
 }
+try { require('./adapters').startWatchers(); } catch (e) { console.error('process watcher:', e.message); }
 refresh();
 setInterval(refresh, 2000).unref?.();
 

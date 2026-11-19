@@ -1,7 +1,7 @@
-import { G, STATUS, KIND, CALL, ROLES, roleOf, $, el, ago, hash, trunc, clamp, damp, P, dist, reduceMotion, t, toolLabel, actText } from './js/core.js';
+import { G, STATUS, KIND, CALL, ROLES, roleOf, registerKind, $, el, ago, hash, trunc, clamp, damp, P, dist, reduceMotion, t, toolLabel, actText } from './js/core.js';
 import { LANGS, getLang, setLang, onLang, applyStatic, locale } from './js/i18n.js';
 import { buildFloor, USER_FLOOR, route } from './js/floor.js';
-import { createActors, updateActors, syncActors } from './js/actors.js';
+import { createActors, updateActors, syncActors, createVisitor } from './js/actors.js';
 import { createPlayer, placePlayer, updatePlayer, inZone, blocked } from './js/player.js';
 import { openChat, closeChat, relocalizeChat } from './js/chat.js';
 import { draw, view, UNIT, screenToWorld, pick } from './js/render.js';
@@ -84,6 +84,7 @@ function computeFloors(v) {
     floors[no - 1].rooms.push(r); r.agents.forEach(a => floorOfAgent.set(a.id, no));
   });
   G.floors = floors; if (G.floorNo > numFloors) G.floorNo = USER_FLOOR;
+  if (G.viewFloor > numFloors || G.viewFloor < 1) G.viewFloor = G.floorNo;
 }
 
 // ---------- calls ----------
@@ -107,6 +108,12 @@ $('demo').onclick = () => {
 };
 
 // ---------- building the current floor ----------
+function findAgentRoom(id) { for (const f of G.floors) for (const r of f.rooms) { const a = r.agents.find(x => x.id === id); if (a) return { agent: a, room: r, floor: f.no }; } return null; }
+// the live actor if the agent is on your floor, otherwise a stand-in built from the scan data (so agents on other floors can be inspected and called)
+function actorOrProxy(id) {
+  const a = G.actors.find(x => x.agent.id === id); if (a) return a;
+  const hit = findAgentRoom(id); return hit ? { agent: hit.agent, role: hit.room.role, roomKey: hit.room.key, goal: null, proxy: true } : null;
+}
 const agentById = (id) => { for (const f of G.floors) for (const r of f.rooms) for (const a of r.agents) if (a.id === id) return a; return null; };
 function loadSecurity(key) {
   const cur = G.security[key]; if (cur && Date.now() - cur._at < 5 * 60 * 1000) return;
@@ -119,6 +126,7 @@ function buildCurrentFloor() {
   const next = buildFloor(G.floorNo, fl ? fl.rooms : [], { waiting });
   const { agents, guards } = createActors(next);
   G.floor = next; G.actors = agents; G.guards = guards;
+  for (const id of [...G.visitors]) { const hit = findAgentRoom(id); if (hit && G.summoned.has(id)) G.actors.push(createVisitor(next, hit.agent, hit.room)); else G.visitors.delete(id); }   // keep arrived visitors across rebuilds
   next.projectRooms.forEach(r => loadSecurity(r.key));
 }
 const floorSig = () => {
@@ -144,9 +152,9 @@ const showLift = () => { liftShown = true; renderLift(); $('lift').hidden = fals
 const hideLift = () => { liftShown = false; $('lift').hidden = true; };
 async function rideTo(n) {
   if (riding || n === G.floorNo) return;
-  riding = true; renderLift(); liftOverride = 0;
+  riding = true; renderLift(); liftOverride = 0; G.summoned.clear(); G.travel.clear(); G.visitors.clear();
   $('fade').textContent = t('lift.going', { n }); $('fade').classList.add('on'); await sleep(900);
-  G.floorNo = n; buildCurrentFloor(); sig = floorSig();
+  G.floorNo = n; G.viewFloor = n; G.floorMenu = false; buildCurrentFloor(); sig = floorSig();
   placePlayer(G.player, n, G.floor.lift.center, Math.PI); selectAgent(null);
   if (G.follow) followPlayer(true, true); else overview(true);
   hudSig = ''; await sleep(350); $('fade').classList.remove('on'); liftOverride = 1; await sleep(500);
@@ -225,7 +233,7 @@ function selectAgent(id) {
   G.selectedId = id; panel = null; if (G.defending && G.defending !== id) G.defending = null;
   const box = $('detail');
   if (!id) { box.hidden = true; return; }
-  if (!G.actors.find(x => x.agent.id === id)) { box.hidden = true; return; }
+  if (!actorOrProxy(id)) { box.hidden = true; return; }
   panel = { id, mode: 'info', achv: null, loading: false, error: '' };
   renderAgentPanel(); box.hidden = false; loadAchv(id, false);
 }
@@ -237,7 +245,7 @@ async function loadAchv(id, forDefense) {
 }
 function renderAgentPanel() {
   if (!panel) return;
-  const act = G.actors.find(x => x.agent.id === panel.id), box = $('detail'); if (!act) { box.hidden = true; return; }
+  const act = actorOrProxy(panel.id), box = $('detail'); if (!act) { box.hidden = true; return; }
   const a = act.agent, st = STATUS[a.status], role = ROLES[act.role] || ROLES.casual, call = G.calledMap.get(a.id);
   const row = (k, v) => [el('dt', { textContent: k }), el('dd', { textContent: v })];
   const badge = el('span', { className: 'badge', textContent: st.label }); badge.style.background = st.color;
@@ -253,13 +261,15 @@ function renderAgentPanel() {
     else kids.push(...achSection(), el('div', { className: 'row' }, el('button', { type: 'button', className: 'danger', textContent: t('def.confirm'), onclick: () => confirmFire(a) }), el('button', { type: 'button', className: 'primary', textContent: t('def.spare'), onclick: cancelFire })), el('p', { className: 'sub', textContent: panel.error || t('def.note') }));
     box.replaceChildren(...kids); return;
   }
-  if (a.kind === 'claude') kids.push(el('div', { className: 'row' }, el('button', { type: 'button', className: 'primary', textContent: t('p.chat'), onclick: () => openChat(act) })));
+  const summoned = G.summoned.has(a.id);
+  kids.push(el('div', { className: 'row' }, ...(a.kind === 'claude' ? [el('button', { type: 'button', className: 'primary', textContent: t('p.chat'), onclick: () => openChat(act) })] : []),
+    el('button', { type: 'button', className: summoned ? 'on' : '', textContent: summoned ? t('p.sendBack') : t('p.callMe'), onclick: () => toggleCall(a.id) })));
   if (call) kids.push(el('div', { className: 'callbox ' + call.kind }, el('b', { textContent: CALL[call.kind].label }), el('p', { textContent: call.text || t('p.noSummary') }), el('button', { type: 'button', textContent: t('p.ack'), onclick: () => ackAgent(a) })));
   kids.push(el('h3', { textContent: t('p.uniform') }), el('p', { className: 'sub', textContent: `${role.label} (${role.desc})` }),
     el('h3', { textContent: t('p.now') }), el('dl', {}, ...row(t('p.activity'), doing || '—'), ...(actText(a) ? row(t('p.tool'), actText(a)) : [])),
     ...achSection(),
     ...(a.lastReply ? [el('h3', { textContent: t('p.lastReply') }), el('p', { className: 'reply', textContent: a.lastReply })] : []),
-    el('h3', { textContent: t('p.info') }), el('dl', {}, ...row(t('p.type'), KIND[a.kind].label), ...row(t('p.folder'), a.cwd), ...(a.worktree ? row(t('p.worktree'), a.worktree) : []), ...row(t('p.source'), a.entrypoint || '—'), ...(a.pid ? row(t('p.pid'), String(a.pid)) : []), ...row(t('p.lastActive'), ago(a.lastActive)), ...row(t('p.id'), a.id)),
+    el('h3', { textContent: t('p.info') }), el('dl', {}, ...row(t('p.type'), KIND[a.kind].label), ...row(t('p.folder'), a.cwd), ...(a.worktree ? row(t('p.worktree'), a.worktree) : []), ...row(t('p.source'), a.entrypoint || '—'), ...(a.pid ? row(t('p.pid'), String(a.pid)) : []), ...row(t('p.lastActive'), ago(a.lastActive)), ...row(t('p.floor'), String(floorOfAgent.get(a.id) || '')), ...row(t('p.id'), a.id)),
     el('h3', { textContent: t('p.subagents', { n: a.subagentTotal }) }),
     a.subagents.length ? el('ul', {}, a.subagents.map(s => el('li', {}, `${s.working ? '● ' : ''}${s.type}`, el('small', { textContent: trunc(s.description, 90) + ' · ' + ago(s.lastActive) })))) : el('div', { className: 'ttl', textContent: t('p.noSubagents') }),
     el('div', { className: 'dangerzone' }, el('button', { type: 'button', className: 'danger', textContent: t('p.fire'), onclick: startFire })));
@@ -272,7 +282,7 @@ async function confirmFire(a) {
   const r = await post('/api/fire', { id: a.id });
   if (r.status === 409) { panel.mode = 'defend'; panel.error = t('def.err409'); renderAgentPanel(); return; }
   if (!r.ok) { panel.error = t('def.errHttp', { n: r.status }); renderAgentPanel(); return; }
-  const act = G.actors.find(x => x.agent.id === a.id);
+  const act = actorOrProxy(a.id);
   ghosts.set(a.id, { agent: a, roomKey: act ? act.roomKey : null });
   G.defending = null; G.firing.add(a.id); selectAgent(null);       // the agent packs up and walks to the lift
   setTimeout(() => { G.firing.delete(a.id); ghosts.delete(a.id); forceRefresh(); }, 22000);
@@ -295,26 +305,104 @@ function renderHud(data) {
     .map(([k, v]) => el('span', { className: 'chip' + (k === 'chip.waiting' && v ? ' hot' : '') }, el('b', { textContent: v ?? 0 }), t(k))));
   $('floorBadge').textContent = t(G.floorNo === USER_FLOOR ? 'floor.badge.yours' : 'floor.badge', { n: G.floorNo });
   const f = G.floor, gc = (p) => G.actors.filter(a => a.goal && a.goal.key.startsWith(p)).length, items = [];
-  if (f) {
-    f.projectRooms.forEach(r => items.push({ name: r.name, sub: t('room.projsub', { role: (ROLES[r.role] || ROLES.casual).label, agents: r.agents.length, live: r.liveCount }), hue: hash(r.name) % 360, rd: r.rd, dots: r.agents }));
+  if (f && G.viewFloor === G.floorNo) {
+    f.projectRooms.forEach(r => items.push({ name: r.name, sub: t('room.projsub', { role: (ROLES[r.role] || ROLES.casual).label, agents: r.agents.length, live: r.liveCount }), hue: hash(r.name) % 360, rd: r.rd, dots: r.agents, room: r }));
     items.push({ name: t('room.fun'), sub: t('side.fun', { n: gc('fun:') }), hue: 100, rd: f.plan.fun }, { name: t('room.toilet'), sub: t('side.toilet', { n: gc('wc:') }), hue: 195, rd: f.plan.toilet }, { name: t('room.lift'), sub: t('side.lift'), hue: 220, rd: f.plan.lift });
     if (f.plan.office) items.push({ name: t('room.office'), sub: t('side.office'), hue: 42, rd: f.plan.office });
+  } else if (G.viewFloor !== G.floorNo) {      // browsing another floor: project cards only (the canvas stays on your floor)
+    const vf = G.floors.find(x => x.no === G.viewFloor);
+    (vf ? vf.rooms : []).forEach(r => items.push({ name: r.name, sub: t('room.projsub', { role: (ROLES[r.role] || ROLES.casual).label, agents: r.agents.length, live: r.liveCount }), hue: hash(r.name) % 360, rd: null, dots: r.agents, room: r }));
   }
-  $('roomList').replaceChildren(...items.map(it => {
-    const b = el('button', { type: 'button' }); b.style.setProperty('--c', `hsl(${it.hue} 60% 55%)`);
-    b.append(el('div', { className: 'nm' }, el('span', { textContent: it.name })), el('div', { className: 'sub', textContent: it.sub }));
+  const list = $('roomList'), keepScroll = list.scrollTop;
+  list.replaceChildren(floorSwitcher(), ...(G.viewFloor !== G.floorNo && !items.length ? [el('div', { className: 'floornote', textContent: t('side.floorEmpty') })] : []), ...items.map(it => {
+    const card = el('div', { className: 'card' }), b = el('button', { type: 'button', className: 'roomhead' }); card.style.setProperty('--c', `hsl(${it.hue} 60% 55%)`);
+    b.append(el('div', { className: 'nm' }, el('span', { textContent: it.name }), it.room ? el('span', { className: 'caret', textContent: G.expanded.has(it.room.key) ? '▾' : '▸' }) : ''), el('div', { className: 'sub', textContent: it.sub }));
     if (it.dots) b.append(el('div', { className: 'dots' }, it.dots.map(a => { const d = el('i'); d.style.background = STATUS[a.status].color; d.title = `${a.name}: ${STATUS[a.status].label}`; return d; })));
-    b.onclick = () => focusRoom(it.rd); return b;
+    const open = !!(it.room && G.expanded.has(it.room.key));
+    // accordion: opening one card closes the others
+    if (it.room) { b.setAttribute('aria-expanded', String(open)); b.onclick = () => { if (G.expanded.has(it.room.key)) G.expanded.delete(it.room.key); else { G.expanded.clear(); G.expanded.add(it.room.key); if (it.rd) focusRoom(it.rd); } renderHud(lastRaw || data); }; }
+    else b.onclick = () => focusRoom(it.rd);
+    card.append(b);
+    if (open) card.append(agentDropdown(it.room));
+    return card;
   }));
+  list.scrollTop = keepScroll;
+}
+
+// The dropdown under a project card: its agents, click one for details, 📞 to call it over to you.
+function agentDropdown(room) {
+  const wrap = el('div', { className: 'agentlist', role: 'list' }); wrap.setAttribute('aria-label', t('side.agentsAria', { name: room.name }));
+  const here = G.viewFloor === G.floorNo, shown = here ? room.agents.filter(a => G.actors.some(x => x.agent.id === a.id)) : room.agents.slice(0, 20);
+  for (const a of shown) {
+    const sum = G.summoned.has(a.id), dot = el('i'); dot.style.background = STATUS[a.status].color;
+    const main = el('button', { type: 'button', className: 'amain', onclick: () => openAgentFromList(a.id) }, dot, el('span', { className: 'an', textContent: a.name }), el('small', { textContent: G.travel.has(a.id) && !G.visitors.has(a.id) ? t('side.traveling') : (actText(a) || STATUS[a.status].label) }));
+    const call = el('button', { type: 'button', className: 'acall' + (sum ? ' on' : ''), title: sum ? t('side.backTip') : t('side.callTip'), textContent: sum ? '↩ ' + t('side.back') : '📞 ' + t('side.call'), onclick: (e) => { e.stopPropagation(); toggleCall(a.id); } });
+    wrap.append(el('div', { className: 'arow' + (G.selectedId === a.id ? ' sel' : ''), role: 'listitem' }, main, call));
+  }
+  const hidden = room.agents.length - shown.length;
+  if (hidden > 0) wrap.append(el('div', { className: 'amore', textContent: t('side.more', { n: hidden }) }));
+  return wrap;
+}
+function openAgentFromList(id) {
+  const act = actorOrProxy(id); if (!act) return;
+  selectAgent(id);
+  if (!act.proxy) {            // on your floor: fly the camera to it
+    const zoom = Math.max(G.cam.zoom, 1.6); G.follow = false; $('follow').classList.remove('on');
+    flyTo(act.st.pos.x - (sidebarPx() / 2) / (UNIT * zoom), act.st.pos.z - 1, zoom);
+  }
+  if (lastRaw) renderHud(lastRaw);
+}
+
+// Call button: the agent walks over to you; press again to send it back.
+// An agent on another floor first rides the lift (a few seconds per floor), then steps out and walks to you.
+function toggleCall(id) {
+  if (G.summoned.has(id)) { G.summoned.delete(id); G.travel.delete(id); }
+  else {
+    G.summoned.add(id);
+    const fl = floorOfAgent.get(id);
+    if (fl && fl !== G.floorNo && !G.visitors.has(id)) G.travel.set(id, { eta: Date.now() + (P_.has('walk') ? 0 : 4000 + 3500 * Math.abs(fl - G.floorNo)), from: fl });
+  }
+  if (lastRaw) renderHud(lastRaw);
+  if (panel && panel.id === id && panel.mode === 'info') renderAgentPanel();
+}
+// agents called from other floors appear in your lift when their ride is over
+function checkArrivals() {
+  if (!G.floor || riding) return;
+  for (const [id, tr] of G.travel) {
+    if (G.visitors.has(id) || !G.summoned.has(id) || Date.now() < tr.eta) continue;
+    const hit = findAgentRoom(id);
+    if (!hit || hit.floor === G.floorNo) { G.travel.delete(id); continue; }
+    G.actors.push(createVisitor(G.floor, hit.agent, hit.room)); G.visitors.add(id);
+    G.floor.lift.openUntil = performance.now() + 3500; hudSig = '';
+  }
+}
+
+// Floor button at the top of the sidebar: shows where you are; the list lets you browse another floor's projects.
+function setViewFloor(n) { G.viewFloor = n; G.floorMenu = false; G.expanded.clear(); if (lastRaw) renderHud(lastRaw); }
+function floorSwitcher() {
+  const box = el('div', { className: 'floorbox' }), viewing = G.viewFloor !== G.floorNo;
+  const b = el('button', { type: 'button', className: 'floorbtn', title: t('fl.menu') }); b.setAttribute('aria-expanded', String(!!G.floorMenu));
+  b.append(el('div', { className: 'nm' }, el('span', { textContent: '📍 ' + t('fl.here', { n: G.floorNo }) }), el('span', { className: 'caret', textContent: G.floorMenu ? '▾' : '▸' })),
+    viewing ? el('div', { className: 'sub', textContent: t('fl.viewing', { n: G.viewFloor }) }) : '');
+  b.onclick = () => { G.floorMenu = !G.floorMenu; if (lastRaw) renderHud(lastRaw); };
+  box.append(b);
+  if (G.floorMenu) box.append(el('div', { className: 'floormenu', role: 'listbox' }, floorStats().reverse().map(s => {
+    const row = el('button', { type: 'button', className: 'frow' + (s.no === G.viewFloor ? ' sel' : ''), role: 'option' }); row.setAttribute('aria-selected', String(s.no === G.viewFloor));
+    row.append(el('b', { textContent: s.no }), el('span', { textContent: t('lift.projAgents', { p: s.projects, a: s.agents }) }),
+      s.no === G.floorNo ? el('i', { textContent: '📍 ' + t('fl.you') }) : (s.waiting ? el('i', { className: 'hot', textContent: t('lift.waiting', { n: s.waiting }) }) : ''));
+    row.onclick = () => setViewFloor(s.no); return row;
+  })));
+  if (viewing && !G.floorMenu) box.append(el('div', { className: 'floornote', textContent: t('fl.note') }));
+  return box;
 }
 
 // ---------- data loop ----------
 function normalize(data) {
   const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
   data.rooms = (Array.isArray(data.rooms) ? data.rooms : []).map(r => ({
-    ...r, key: String(r.key ?? r.name), name: String(r.name ?? '?'), path: String(r.path ?? ''), liveCount: num(r.liveCount), activity: num(r.activity), role: roleOf(String(r.name ?? ''), String(r.path ?? '')),
+    ...r, key: String(r.key ?? r.name), name: r.unknown ? t('room.unknown', { tool: String(r.name ?? '?') }) : String(r.name ?? '?'), path: String(r.path ?? ''), liveCount: num(r.liveCount), activity: num(r.activity), role: roleOf(String(r.name ?? ''), String(r.path ?? '')),
     agents: (Array.isArray(r.agents) ? r.agents : []).map(a => ({
-      ...a, id: String(a.id), name: String(a.name ?? a.id), title: String(a.title ?? ''), cwd: String(a.cwd ?? ''), status: a.status in STATUS ? a.status : 'sleeping', kind: a.kind in KIND ? a.kind : 'claude',
+      ...a, id: String(a.id), name: String(a.name ?? a.id), title: String(a.title ?? ''), cwd: String(a.cwd ?? ''), status: a.status in STATUS ? a.status : 'sleeping', kind: a.kind in KIND ? a.kind : (typeof a.kind === 'string' && /^[a-z0-9_-]{1,31}$/i.test(a.kind) ? registerKind(a.kind, a.kindLabel, a.kindColor) : 'claude'),
       attention: a.attention === 'ask' || a.attention === 'done' ? a.attention : null, attentionAt: num(a.attentionAt), lastText: String(a.lastText ?? ''), activity: String(a.activity ?? ''), lastReply: String(a.lastReply ?? ''),
       lastActive: num(a.lastActive), subagentTotal: num(a.subagentTotal), subagents: Array.isArray(a.subagents) ? a.subagents : [],
     })),
@@ -323,7 +411,7 @@ function normalize(data) {
 }
 const viewOf = (data) => { const s = $('showSleep').checked; return { ...data, rooms: data.rooms.map(r => ({ ...r, agents: r.agents.filter(a => s || a.status !== 'sleeping') })).filter(r => r.agents.length) }; };
 
-let sig = '', hudSig = '', busy = false, tAcc = 0;
+let sig = '', hudSig = '', busy = false, tAcc = 0, lastRaw = null;
 const ghosts = new Map();
 async function refresh() {
   if (busy || document.hidden) return; busy = true;
@@ -331,7 +419,7 @@ async function refresh() {
     const res = await fetch('/api/world', { cache: 'no-store' }); if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = normalize(await res.json()), v = viewOf(data);
     for (const gh of ghosts.values()) { const r = v.rooms.find(x => x.key === gh.roomKey); if (r && !r.agents.some(x => x.id === gh.agent.id)) r.agents.push(gh.agent); }   // a dismissed agent stays visible while it walks to the lift
-    G.lastData = v; computeFloors(v); computeCalled(v); $('err').hidden = true;
+    G.lastData = v; lastRaw = data; computeFloors(v); computeCalled(v); $('err').hidden = true;
     if (!riding) {
       const s = floorSig();
       if (s !== sig) { buildCurrentFloor(); sig = s; } else syncActors(v);
@@ -348,6 +436,11 @@ async function refresh() {
         const wt = Number(P_.get('walktest')) || 0;
         if (wt) { for (let i = 0; i < 120; i++) { tAcc += 1 / 30; updateActors(G.floor, 1 / 30, tAcc); } G.actors.slice().sort((x, y) => y.agent.live - x.agent.live).slice(0, 4).forEach((a, i) => demo.set(a.agent.id, i % 2 ? 'done' : 'ask')); computeCalled(G.lastData); buildCurrentFloor(); sig = floorSig(); for (let i = 0; i < wt * 30; i++) { tAcc += 1 / 30; updateActors(G.floor, 1 / 30, tAcc); } }
         if (P_.has('selftest')) runSelfTest();
+        const vw = Number(P_.get('view')); if (vw && G.floors.some(x => x.no === vw)) G.viewFloor = vw;
+        if (P_.has('floormenu')) G.floorMenu = true;
+        const ex = P_.get('expand'); if (ex) { const r = G.floors.flatMap(x => x.rooms).find(x => x.name.toLowerCase().includes(ex.toLowerCase())); if (r) G.expanded.add(r.key); }   // preview: open a sidebar card
+        const sm = P_.get('summon');                                                                                                  // preview: call an agent over from any floor (?walk=SECONDS to watch)
+        if (sm) { let id = null; for (const fl of G.floors) for (const r of fl.rooms) for (const ag of r.agents) if (!id && ag.name.toLowerCase().includes(sm.toLowerCase())) id = ag.id; if (id) { for (let i = 0; i < 120; i++) { tAcc += 1 / 30; updateActors(G.floor, 1 / 30, tAcc); } toggleCall(id); for (let i = 0; i < (Number(P_.get('walk')) || 0) * 30; i++) { tAcc += 1 / 30; checkArrivals(); updateActors(G.floor, 1 / 30, tAcc); } } }
         const gc = P_.get('guardchat'); if (gc) { const g = G.guards.find(x => (x.agent.projectName || '').includes(gc)); if (g) openChat(g); }   // opens the panel only; never sends anything
         const ch = P_.get('chat'); if (ch) { const a = G.actors.find(x => x.agent.name.includes(ch)); if (a) openChat(a); }   // opens the panel only; never sends anything
         if (P_.get('ride')) rideTo(Number(P_.get('ride')));
@@ -357,7 +450,7 @@ async function refresh() {
         if (P_.get('modal') === 'security' && G.floor.projectRooms[0]) openSecurity(G.floor.projectRooms[0].key);
       }
     }
-    const h = JSON.stringify([v.stats, G.floorNo, G.callOrder, G.blocked, v.rooms.map(r => [r.key, r.liveCount, r.agents.map(a => [a.id, a.status, a.name])])]) + Math.floor(Date.now() / 8000) + G.selectedId;
+    const h = JSON.stringify([v.stats, G.floorNo, G.callOrder, G.blocked, v.rooms.map(r => [r.key, r.liveCount, r.agents.map(a => [a.id, a.status, a.name])])]) + Math.floor(Date.now() / 8000) + G.selectedId + [...G.summoned].join() + [...G.expanded].join() + G.viewFloor + G.floorMenu + [...G.travel.keys()].join() + [...G.visitors].join();
     if (h !== hudSig && G.floor) { hudSig = h; renderHud(data); if (panel && panel.mode === 'info' && !panel.loading) renderAgentPanel(); if (liftShown) renderLift(); }
     $('upd').textContent = t('updated', { time: new Date(data.generatedAt || Date.now()).toLocaleTimeString(locale()) });
   } catch (e) { console.error(e); $('err').textContent = t('err.load', { msg: e.message }); $('err').hidden = false; }
@@ -406,9 +499,9 @@ function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.1) * TIME_SCALE; last = now; const t = reduceMotion ? 0 : (tAcc += dt);
   const f = G.floor, pl = G.player;
   if (f) {
-    updateActors(f, dt, t); updatePlayer(pl, dt, f, riding);
+    checkArrivals(); updateActors(f, dt, t); updatePlayer(pl, dt, f, riding);
     const lift = f.lift, near = pl.floorNo === f.no && dist(pl.pos, lift.center) < 6.5;
-    lift.open += ((liftOverride ?? (near ? 1 : 0)) - lift.open) * damp(5, dt);
+    lift.open += ((liftOverride ?? ((near || performance.now() < (lift.openUntil || 0)) ? 1 : 0)) - lift.open) * damp(5, dt);
     if (!riding) { const inLift = inZone(pl.pos, lift.zone); if (!inLift) liftLock = false; if (inLift && !liftLock && !liftShown) showLift(); else if (liftShown && (!inLift || liftLock)) hideLift(); }
   }
   if (camGoal) { const k = reduceMotion ? 1 : damp(6, dt); G.cam.x += (camGoal.x - G.cam.x) * k; G.cam.z += (camGoal.z - G.cam.z) * k; G.cam.zoom += (camGoal.zoom - G.cam.zoom) * k; if (Math.abs(camGoal.x - G.cam.x) + Math.abs(camGoal.z - G.cam.z) + Math.abs(camGoal.zoom - G.cam.zoom) < 0.01) camGoal = null; }
@@ -438,7 +531,7 @@ function languageMenu() {
 }
 function controllerMenu() {
   const keys = [[t('ctl.k.move'), t('ctl.move')], ['Shift', t('ctl.run')], ['C', t('ctl.follow')], ['O', t('ctl.overview')], [t('ctl.k.pan'), t('ctl.pan')], [t('ctl.k.zoom'), t('ctl.zoom')],
-    [t('ctl.k.agent'), t('ctl.agent')], [t('ctl.k.monitor'), t('ctl.monitor')], [t('ctl.k.guard'), t('ctl.guard')], [t('ctl.k.lift'), t('ctl.lift')], ['Esc', t('ctl.close')]];
+    [t('ctl.k.agent'), t('ctl.agent')], [t('ctl.k.card'), t('ctl.card')], [t('ctl.k.monitor'), t('ctl.monitor')], [t('ctl.k.guard'), t('ctl.guard')], [t('ctl.k.lift'), t('ctl.lift')], ['Esc', t('ctl.close')]];
   const refresh = () => openSettings();
   const toggle = (label, on, onclick) => el('button', { type: 'button', className: on ? 'on' : '', textContent: (on ? '✓ ' : '') + label, onclick });
   const sleepBox = el('input', { type: 'checkbox', checked: $('showSleep').checked });

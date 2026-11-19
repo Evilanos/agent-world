@@ -26,3 +26,6 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# your personal config (may contain private paths)
+agent-world.config.json

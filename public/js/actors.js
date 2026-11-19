@@ -34,6 +34,14 @@ export function createActors(floor) {
   return { agents, guards };
 }
 
+// An agent from another floor who rode the lift to you: starts inside the lift and walks out.
+export function createVisitor(floor, agent, room) {
+  const home = P(floor.lift.center.x, floor.lift.center.z);
+  const a = makeActor(floor, agent, { home, roomKey: room.key, role: room.role });
+  a.visitor = true; a.fresh = false; a.alpha = 0;
+  return a;
+}
+
 export function syncActors(view) {
   const byId = new Map(view.rooms.flatMap(r => r.agents).map(a => [a.id, a]));
   for (const a of G.actors) { const na = byId.get(a.agent.id); if (na) a.agent = na; }
@@ -41,9 +49,11 @@ export function syncActors(view) {
 
 // ---------------------------------------------------------------- goals
 function planFrame(floor) {
-  const actors = G.actors, guards = G.guards, T = Date.now() / 1000, goals = new Map(), pl = G.player;
+  const all = G.actors, actors = all.filter(a => !a.visitor), guards = G.guards, T = Date.now() / 1000, goals = new Map(), pl = G.player;
   const userHere = pl && pl.floorNo === floor.no, slots = floor.slots;
-  const byId = new Map(actors.map(a => [a.agent.id, a]));
+  const byId = new Map(all.map(a => [a.agent.id, a]));
+  // visitors from other floors go back to the lift when you send them away
+  for (const a of all) if (a.visitor && !G.summoned.has(a.agent.id)) goals.set(a.agent.id, { key: 'leave', pos: floor.lift.center, yaw: Math.PI, pose: 'stand', bubble: '' });
 
   // 0) dismissed agents walk out through the lift; the one being judged pleads for mercy
   for (const id of G.firing) if (byId.has(id)) goals.set(id, { key: 'fired', pos: floor.lift.center, yaw: Math.PI, pose: 'sad', bubble: '😢' });
@@ -56,11 +66,11 @@ function planFrame(floor) {
   }
   // 1) called by the human, who is on this floor: walk over and stand in front of them
   if (userHere) {
-    const here = G.callOrder.filter(id => byId.has(id) && !goals.has(id));
+    const here = [...new Set([...G.summoned, ...G.callOrder])].filter(id => byId.has(id) && !goals.has(id));   // called by you, or finished / asking
     const fx = Math.sin(pl.yaw), fz = Math.cos(pl.yaw), rx = fz, rz = -fx;
     here.forEach((id, i) => {
       const call = G.calledMap.get(id), o = (i - (here.length - 1) / 2) * 1.9;
-      goals.set(id, { key: 'user', follow: true, pos: P(pl.pos.x + fx * 2.4 + rx * o, pl.pos.z + fz * 2.4 + rz * o), yaw: pl.yaw + Math.PI, pose: call.kind === 'ask' ? 'wave' : 'cheer' });
+      goals.set(id, { key: 'user', follow: true, pos: P(pl.pos.x + fx * 2.4 + rx * o, pl.pos.z + fz * 2.4 + rz * o), yaw: pl.yaw + Math.PI, pose: call ? (call.kind === 'ask' ? 'wave' : 'cheer') : 'wave', bubble: call ? '' : t('summon.bubble') });
     });
   }
   // 2) busy / dozing agents stay at their desks
@@ -159,13 +169,15 @@ function updateActor(a, goal, t, dt, floor) {
   a.facing = facingOf(a.yaw);
   a.pose = moving ? 'walk' : goal.pose;
   a.bubbleTxt = moving ? '' : (goal.bubble || '');
-  if (goal.key === 'fired' && !moving) { a.alpha = Math.max(0, a.alpha - dt * 0.8); if (a.alpha <= 0) a.gone = true; } else a.alpha = Math.min(1, a.alpha + dt * 2);
+  if ((goal.key === 'fired' || goal.key === 'leave') && !moving) { a.alpha = Math.max(0, a.alpha - dt * 0.8); if (a.alpha <= 0) a.gone = true; } else a.alpha = Math.min(1, a.alpha + dt * 2);
 }
 
 export function updateActors(floor, dt, t) {
   G.frame++;
   const goals = planFrame(floor), all = [...G.actors, ...G.guards];
   for (const a of all) updateActor(a, goals.get(a.agent.id) || { key: 'desk', pos: a.home, yaw: 0, pose: 'sleep' }, t, dt, floor);
+  const gone = G.actors.filter(a => a.visitor && a.gone);          // visitors that stepped back into the lift
+  if (gone.length) { G.actors = G.actors.filter(a => !(a.visitor && a.gone)); gone.forEach(a => { G.visitors.delete(a.agent.id); G.travel.delete(a.agent.id); }); }
   const ready = ['fun:pp0', 'fun:pp1'].every(k => G.actors.some(a => a.goal && a.goal.key === k && a.st.ri >= a.st.route.length));
   const pp = floor.pingpong;
   if (pp) { if (ready) { const u = (t * 1.6) % 2, k = u < 1 ? u : 2 - u; pp.ball = { x: pp.x + Math.sin(t * 2) * 0.1, z: pp.z - 1.2 + k * 2.4 }; } else pp.ball = null; }

@@ -45,6 +45,7 @@ export default {
   'room.office': 'Your office', 'room.office.sub': 'floor {n} · private office',
   'room.lobby': 'Lobby floor {n}',
   'room.empty': 'Empty room', 'room.empty.sub': 'no project yet',
+  'room.unknown': '{tool} (folder unknown)',
   'room.projsub': '{role} · {agents} agents · {live} online',
   'board.none': 'No tasks yet.', 'board.click': 'CLICK: TASK SUMMARY / PRD',
   'desk.inbox': 'INBOX {n}', 'desk.you': 'YOU',
@@ -190,4 +191,27 @@ export default {
   "ctl.k.lift": "Walk into the lift",
   "ctl.lift": "Choose another floor (or press 1-9)",
   "ctl.close": "Close panels",
+
+  // ---- project dropdown / call ----
+  "side.call": "Call",
+  "side.callTip": "Ask this agent to come to you",
+  "side.back": "Back",
+  "side.backTip": "Send this agent back to where it was",
+  "side.more": "+{n} more not shown",
+  "side.agentsAria": "Agents in {name}",
+  "p.callMe": "📞 Call to me",
+  "p.sendBack": "↩ Send back",
+  "summon.bubble": "🙋 Yes?",
+  "ctl.k.card": "Click a project card",
+  "ctl.card": "Open its agent list; 📞 Call brings an agent to you",
+
+  // ---- floor browser ----
+  "fl.here": "You are on floor {n}",
+  "fl.viewing": "Browsing floor {n}",
+  "fl.menu": "Choose a floor to browse",
+  "fl.you": "you are here",
+  "fl.note": "Agents you call from here come to you by lift.",
+  "side.traveling": "🛗 on the way by lift…",
+  "side.floorEmpty": "No projects on this floor.",
+  "p.floor": "Floor",
 };

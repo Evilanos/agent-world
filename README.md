@@ -28,6 +28,7 @@ Everything runs **locally** on your machine. There is nothing to sign up for, no
 - [Chatting with agents](#chatting-with-agents)
 - [Is it safe?](#is-it-safe)
 - [Supported agents and platforms](#supported-agents-and-platforms)
+- [Detecting other agent tools](#detecting-other-agent-tools)
 - [Configuration](#configuration)
 - [Troubleshooting](#troubleshooting)
 - [How it works](#how-it-works)
@@ -36,7 +37,7 @@ Everything runs **locally** on your machine. There is nothing to sign up for, no
 ## Quick start
 
 **You need:** [Node.js](https://nodejs.org) 20 or newer, and a modern browser (Chrome, Edge, Firefox, Safari).
-To see real agents you also need [Claude Code](https://claude.com/claude-code) installed (see [Supported agents](#supported-agents-and-platforms)).
+To see real agents you need at least one supported agent tool installed, e.g. [Claude Code](https://claude.com/claude-code) (see [Supported agents](#supported-agents-and-platforms) for Codex, OpenCode, Gemini CLI, Aider, Goose and others).
 
 ```bash
 git clone <repository-url>
@@ -75,6 +76,8 @@ Each floor has 3 project rooms. If you have more projects, extra floors appear a
 | `W A S D` or arrow keys | Walk around (hold `Shift` to run). You collide with walls and furniture. |
 | `C` | Toggle the "follow my character" camera |
 | Drag / mouse wheel | Pan / zoom |
+| **Floor button** (top of the left sidebar) | Always shows the floor you are standing on (📍). Its list lets you **browse any other floor**: the sidebar then shows that floor's project cards, and you can inspect and **📞 Call** agents that are not on your floor. A called agent rides the lift to you (a few seconds per floor), steps out of your floor's lift and walks over; **Back** sends it back. Your character and the map stay on your floor (to go to another floor yourself, use the lift). |
+| Click a project card in the left sidebar | Opens a dropdown with that project's agents (click one for its details; **📞 Call** makes it walk over to you, **Back** sends it home) |
 | Click an agent | Details, **achievements**, chat, fire |
 | Click the monitor on a room's wall | Project summary: each agent's task plus excerpts of `PRD.md` / `README.md` if the project has them |
 | Click a guard or the server console (🛡) | Security report of that project |
@@ -138,7 +141,7 @@ Short version: it reads your agent session files, shows them in your browser on 
 
 - **Local only.** The server binds to `127.0.0.1`, and requests with an unexpected `Host` header are rejected (DNS-rebinding protection).
   **Do not expose the port to a network or the internet.** The UI shows session titles, your last prompts and replies, project paths, and the chat can drive your agents.
-- **Read-only by default.** It reads `~/.claude/sessions`, `~/.claude/projects` and the Antigravity history file. It never writes into them. The only things it writes are its own files in `data/` (the fired list and the chat/fork mapping).
+- **Read-only by default.** It reads `~/.claude/sessions`, `~/.claude/projects`, the Antigravity history file and the session folders of the other tools listed below, and lists running processes (name and command line, kept in memory only). It never writes into any of them. The only things it writes are its own files in `data/` (the fired list and the chat/fork mapping).
 - **Write actions are guarded.** `POST` endpoints require a custom `X-AW` header and a matching `Origin`, so other websites you visit cannot trigger them.
 - **The browser cannot choose folders.** Project folders for the security scan, project summary and chat always come from the server's own scan, never from request parameters. Static files are served from `public/` only.
 - **What leaves your machine:** only what you type in a chat (plus, for Security chats, the scan report and the code files the guard reads), sent to Anthropic through the `claude` CLI exactly as if you had typed it in a terminal. Nothing is sent unless you use a chat.
@@ -146,11 +149,59 @@ Short version: it reads your agent session files, shows them in your browser on 
 
 ## Supported agents and platforms
 
+Agent World looks for agents in three ways, from most to least precise:
+
+1. **Session files.** Built-in adapters read each tool's own history folder (read-only).
+2. **Running processes.** A background process list recognises agent CLIs even when their files are unknown to us, so they still show up (and sessions of a tool that is running are marked online).
+3. **Your own config.** Any other tool can be added in a few lines of JSON, no code ([see below](#detecting-other-agent-tools)).
+
 | Tool | Support |
 |---|---|
-| **Claude Code** (CLI, VS Code extension, desktop, Orca) | Full: live status, current tool, subagents, finished / asking detection, achievements, chat |
-| **Antigravity CLI** (`~/.gemini/antigravity-cli`) | Presence only (shows up in the project it was used in) |
-| Copilot CLI, OpenCode, Codex, Cursor, Aider, ... | Not supported yet |
+| **Claude Code** (CLI, VS Code extension, desktop, Orca) | **Full**: live status, current tool, subagents, finished / asking detection, achievements, chat. Tested. |
+| **Antigravity CLI** (`~/.gemini/antigravity-cli`) | Presence only (shows up in the project it was used in). Tested. |
+| OpenAI **Codex CLI**, **OpenCode**, **Goose**, **Continue**, **Gemini CLI**, **Aider**, **Cline / Roo Code** | **Experimental** session-file adapters: the agent, its title and its project folder appear in a room. Written from each tool's public file format and **not yet verified on real installs**: if one does not show up, run `npm run discover` and open an issue (or use a config adapter). Cline / Roo Code do not store the project folder, so they get a "folder unknown" room. |
+| Codex, Gemini CLI, OpenCode, Aider, Goose, Cursor Agent, Copilot CLI, Amp, Qwen Code, Crush, Droid, Kimi, GLM CLI | Detected while **running** through the process list (no session history needed). |
+| Anything else | Add a config adapter ([below](#detecting-other-agent-tools)). |
+
+Only Claude Code agents can be chatted with and have achievements; other tools are shown and can be called to your desk, but their history is not parsed.
+
+**About "GLM" and similar models:** GLM, DeepSeek, Kimi, Qwen, etc. are *models*. When you use them through Claude Code, OpenCode, Cline, ... they are detected as that tool. A dedicated GLM command-line tool is detected only if it is in the process list above or described in your config.
+
+Honest limit: nobody can promise to know every agent tool, since each stores data differently and they change often. That is what `npm run discover` and the config adapters are for.
+
+### Detecting other agent tools
+
+```bash
+npm run discover        # or: node scripts/discover.js
+```
+
+It lists the agent tools it finds on your computer (known folders, plus recently changed session-like JSON/JSONL files), which ones Agent World already sees, which agent CLIs are running right now, and prints a config snippet you can adjust.
+
+To add a tool, copy [`agent-world.config.example.json`](agent-world.config.example.json) to `agent-world.config.json` (next to `server.js`) or to `~/.agent-world.json`. Changes apply without restarting.
+
+```json
+{
+  "disable": ["cline"],
+  "projectRoots": ["~/code"],
+  "adapters": [{
+    "id": "mytool", "name": "My Agent Tool", "color": "#ff8800",
+    "files": "~/.mytool/sessions/**/*.jsonl",
+    "format": "jsonl",
+    "fields": { "id": "session.id", "cwd": "session.workingDirectory", "title": "firstPrompt", "time": "updatedAt" }
+  }]
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `disable` | Built-in adapter / process ids to hide (e.g. `"codex"`) |
+| `projectRoots` | Folders where your projects live (their sub-folders count too). Lets history-per-project tools such as Aider and Gemini CLI be matched to folders |
+| `adapters[].files` | Glob of session files (`~`, `%APPDATA%`, `$HOME` are expanded; `*`, `**`, `?` supported) |
+| `adapters[].format` | `jsonl` (first ~200 lines are read) or `json` (whole file) |
+| `adapters[].fields` | Dot-paths into the JSON: `id`, `cwd` (project folder), `title`, `time` (ms, seconds or ISO date). Missing fields fall back to the file name / modified time |
+| `adapters[].staticCwd` | Use this folder when the tool does not store one |
+
+An agent with no known folder gets a room named "<tool> (folder unknown)".
 
 | Platform | Status |
 |---|---|
@@ -177,7 +228,7 @@ $env:PORT = 8080; node server.js              # Windows PowerShell
 
 | Problem | What to check |
 |---|---|
-| **No agents appear** | Does `~/.claude/projects` exist and contain `.jsonl` files? Run Claude Code once in a project folder. Agents are discovered every 2 seconds. On Windows `~` is `C:\Users\<you>`. |
+| **No agents appear** | Run `npm run discover` to see which tools were found. For Claude Code, does `~/.claude/projects` exist and contain `.jsonl` files? Run it once in a project folder. A tool we do not know? Add a [config adapter](#detecting-other-agent-tools). Agents are discovered every 2 seconds. On Windows `~` is `C:\Users\<you>`. |
 | **"Address already in use"** | Another program uses port 4173. Start with a different `PORT`. |
 | **Everything shows as sleeping / nothing is "working"** | Only sessions with a running Claude Code process count as live. Closed sessions appear as recent or sleeping. |
 | **Chat says it cannot run `claude`** | Install Claude Code, make sure `claude --version` works in a terminal, or set `CLAUDE_BIN` to the full path. |
@@ -194,6 +245,7 @@ $env:PORT = 8080; node server.js              # Windows PowerShell
 | `~/.claude/sessions/*.json` | Live sessions: name, working folder, busy / idle, process id |
 | `~/.claude/projects/**/*.jsonl` | Transcripts: title, last turn (finished or asking), current tool, subagents, achievements |
 | `~/.gemini/antigravity-cli/history.jsonl` | Antigravity workspaces |
+| `adapters/` (session folders of other tools, process list, `agent-world.config.json`) | Every other agent tool |
 
 The live view only parses the head and tail of each transcript. Achievements stream a whole transcript on demand and keep only short outlines.
 
@@ -217,6 +269,7 @@ An agent is "calling" you when its last assistant turn (within the last 30 minut
 ```
 server.js        HTTP server, API routes, static files
 scan.js          Discovers agents and rooms, status, "calling" detection, project summaries
+adapters/        Detection of other agent tools: builtin.js (file adapters), processes.js (process list), config.js (user adapters), lib.js, index.js
 history.js       Streams a transcript into an achievements outline
 security.js      Static security scanner
 chat.js          Headless Claude Code chat (resume / fork, streaming)
@@ -232,6 +285,7 @@ public/
   js/i18n.js     Language list, t() and live switching
   js/lang/       One dictionary per language (en, id, es, ja, zh)
 scripts/check-i18n.js   Dictionary consistency checker (npm run check:i18n)
+scripts/discover.js    Finds agent tools on this machine (npm run discover)
 ```
 
 ## Contributing

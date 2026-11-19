@@ -44,6 +44,7 @@ export default {
   'room.office': 'Tu oficina', 'room.office.sub': 'planta {n} · oficina privada',
   'room.lobby': 'Vestíbulo planta {n}',
   'room.empty': 'Sala vacía', 'room.empty.sub': 'aún sin proyecto',
+  'room.unknown': '{tool} (carpeta desconocida)',
   'room.projsub': '{role} · {agents} agentes · {live} en línea',
   'board.none': 'Aún no hay tareas.', 'board.click': 'CLIC: RESUMEN DE TAREAS / PRD',
   'desk.inbox': 'BANDEJA {n}', 'desk.you': 'TÚ',
@@ -189,4 +190,27 @@ export default {
   "ctl.k.lift": "Entrar al ascensor",
   "ctl.lift": "Elegir otra planta (o pulsa 1-9)",
   "ctl.close": "Cerrar paneles",
+
+  // ---- project dropdown / call ----
+  "side.call": "Llamar",
+  "side.callTip": "Pide a este agente que venga hacia ti",
+  "side.back": "Volver",
+  "side.backTip": "Enviar al agente de vuelta a donde estaba",
+  "side.more": "+{n} más sin mostrar",
+  "side.agentsAria": "Agentes en {name}",
+  "p.callMe": "📞 Llamar aquí",
+  "p.sendBack": "↩ Enviar de vuelta",
+  "summon.bubble": "🙋 ¿Sí?",
+  "ctl.k.card": "Clic en una tarjeta de proyecto",
+  "ctl.card": "Abre su lista de agentes; 📞 Llamar trae a un agente hacia ti",
+
+  // ---- floor browser ----
+  "fl.here": "Estás en la planta {n}",
+  "fl.viewing": "Viendo la planta {n}",
+  "fl.menu": "Elige una planta para ver",
+  "fl.you": "estás aquí",
+  "fl.note": "Los agentes que llames desde aquí llegan a ti en ascensor.",
+  "side.traveling": "🛗 en camino por el ascensor…",
+  "side.floorEmpty": "No hay proyectos en esta planta.",
+  "p.floor": "Planta",
 };

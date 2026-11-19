@@ -44,6 +44,7 @@ export default {
   'room.office': '你的办公室', 'room.office.sub': '{n} 楼 · 独立办公室',
   'room.lobby': '{n} 楼大厅',
   'room.empty': '空房间', 'room.empty.sub': '暂无项目',
+  'room.unknown': '{tool}(文件夹未知)',
   'room.projsub': '{role} · {agents} 个智能体 · {live} 个在线',
   'board.none': '暂无任务。', 'board.click': '点击：任务摘要 / PRD',
   'desk.inbox': '收件箱 {n}', 'desk.you': '你',
@@ -189,4 +190,27 @@ export default {
   "ctl.k.lift": "走进电梯",
   "ctl.lift": "选择其他楼层（或按 1-9）",
   "ctl.close": "关闭面板",
+
+  // ---- project dropdown / call ----
+  "side.call": "呼叫",
+  "side.callTip": "让这个代理走到你身边",
+  "side.back": "返回",
+  "side.backTip": "让这个代理回到原处",
+  "side.more": "另有 {n} 个未显示",
+  "side.agentsAria": "{name} 中的代理",
+  "p.callMe": "📞 叫到这里",
+  "p.sendBack": "↩ 让其返回",
+  "summon.bubble": "🙋 有事？",
+  "ctl.k.card": "点击项目卡片",
+  "ctl.card": "展开代理列表；📞 呼叫 让代理走到你身边",
+
+  // ---- floor browser ----
+  "fl.here": "你在 {n} 楼",
+  "fl.viewing": "正在浏览 {n} 楼",
+  "fl.menu": "选择要浏览的楼层",
+  "fl.you": "你在这里",
+  "fl.note": "从这里呼叫的代理会乘电梯来找你。",
+  "side.traveling": "🛗 正乘电梯赶来…",
+  "side.floorEmpty": "该楼层没有项目。",
+  "p.floor": "楼层",
 };

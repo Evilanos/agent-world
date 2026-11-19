@@ -44,6 +44,7 @@ export default {
   'room.office': 'あなたのオフィス', 'room.office.sub': '{n}階 · 個室オフィス',
   'room.lobby': '{n}階ロビー',
   'room.empty': '空き部屋', 'room.empty.sub': 'プロジェクトはまだありません',
+  'room.unknown': '{tool}(フォルダ不明)',
   'room.projsub': '{role} · エージェント{agents}人 · オンライン{live}人',
   'board.none': 'タスクはまだありません。', 'board.click': 'クリック: タスク概要 / PRD',
   'desk.inbox': '受信 {n}', 'desk.you': 'あなた',
@@ -189,4 +190,27 @@ export default {
   "ctl.k.lift": "リフトに入る",
   "ctl.lift": "別のフロアを選ぶ（または 1〜9 キー）",
   "ctl.close": "パネルを閉じる",
+
+  // ---- project dropdown / call ----
+  "side.call": "呼ぶ",
+  "side.callTip": "このエージェントを自分のところへ呼ぶ",
+  "side.back": "戻す",
+  "side.backTip": "このエージェントを元の場所に戻す",
+  "side.more": "他{n}人は非表示",
+  "side.agentsAria": "{name}のエージェント",
+  "p.callMe": "📞 ここへ呼ぶ",
+  "p.sendBack": "↩ 戻す",
+  "summon.bubble": "🙋 はい？",
+  "ctl.k.card": "プロジェクトカードをクリック",
+  "ctl.card": "エージェント一覧を開く。📞 呼ぶ でエージェントが来る",
+
+  // ---- floor browser ----
+  "fl.here": "現在地: {n}階",
+  "fl.viewing": "{n}階を表示中",
+  "fl.menu": "表示するフロアを選ぶ",
+  "fl.you": "現在地",
+  "fl.note": "ここから呼んだエージェントはリフトで来ます。",
+  "side.traveling": "🛗 リフトで移動中…",
+  "side.floorEmpty": "このフロアにプロジェクトはありません。",
+  "p.floor": "フロア",
 };

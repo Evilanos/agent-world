@@ -207,3 +207,34 @@ kbd { background: rgba(255,255,255,.08); border: 1px solid var(--line); border-b
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
 .actions button.on { border-color: var(--recent); color: var(--recent); }
 .checkrow { display: flex; gap: 8px; align-items: center; color: var(--text); cursor: pointer; }
+
+/* ---- sidebar: project cards with an agent dropdown ---- */
+.rooms .card { border-left: 4px solid var(--c, #888); background: var(--panel); border-radius: 8px; overflow: hidden; border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.rooms .roomhead { border: none; border-left: none; border-radius: 0; background: transparent; }
+.rooms .roomhead .nm { align-items: center; }
+.caret { color: var(--muted); }
+.agentlist { border-top: 1px solid var(--line); background: rgba(0,0,0,.18); padding: 4px 0; max-height: 280px; overflow-y: auto; }
+.arow { display: flex; align-items: center; gap: 4px; padding: 0 6px 0 0; }
+.arow.sel { background: rgba(74,168,255,.14); }
+.agentlist .amain { flex: 1; min-width: 0; display: grid; grid-template-columns: 10px 1fr; column-gap: 8px; align-items: center; text-align: left; background: transparent; border: none; border-left: none; padding: 6px 8px 6px 12px; border-radius: 0; width: auto; }
+.agentlist .amain i { width: 9px; height: 9px; border-radius: 50%; grid-row: span 2; }
+.agentlist .amain .an { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agentlist .amain small { grid-column: 2; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agentlist .amain:hover { background: rgba(255,255,255,.05); }
+.agentlist .acall { flex: none; width: auto; padding: 3px 9px; font-size: 12px; border-radius: 999px; border: 1px solid var(--line); border-left: 1px solid var(--line); }
+.agentlist .acall.on { border-color: var(--idle); color: var(--idle); }
+.amore { padding: 4px 14px; color: var(--muted); font-size: 11.5px; }
+
+/* ---- floor button + floor list (sidebar) ---- */
+.floorbox { margin-bottom: 2px; }
+.rooms .floorbtn { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid #d8b25a; border-radius: 8px; }
+.rooms .floorbtn .nm { align-items: center; font-weight: 700; }
+.floormenu { margin-top: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+.rooms .frow { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; border: none; border-left: none; border-radius: 6px; background: transparent; padding: 7px 8px; }
+.rooms .frow b { color: #d8b25a; font-size: 16px; }
+.rooms .frow i { font-style: normal; font-size: 11.5px; color: var(--muted); }
+.rooms .frow i.hot { color: var(--busy); font-weight: 600; }
+.rooms .frow.sel { background: rgba(74,168,255,.16); }
+.rooms .frow:hover { background: rgba(255,255,255,.06); }
+.floornote { color: var(--muted); font-size: 11.5px; padding: 6px 8px 2px; }
+.floornote { background: var(--panel); border-radius: 8px; border: 1px solid var(--line); margin-top: 4px; padding: 6px 10px; }

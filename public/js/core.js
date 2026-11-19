@@ -16,6 +16,8 @@ export const KIND = {
   antigravity: tx({ color: '#8b7cf6' }, { label: 'kind.antigravity' }),
   security:    tx({ color: '#f2c200' }, { label: 'kind.security' }),
 };
+// Agent tools the server found that this file does not know yet (Codex, OpenCode, custom adapters, ...) get a label and colour from the server
+export function registerKind(id, label, color) { if (!KIND[id]) KIND[id] = { color: /^#[0-9a-fA-F]{6}$/.test(color || '') ? color : '#9aa4b8', label: String(label || id).slice(0, 40) }; return id; }
 export const CALL = {
   ask:  tx({ bg: '#ffb020', fg: '#1c1300' }, { label: 'call.ask.label', bubble: 'call.ask.bubble' }),
   done: tx({ bg: '#3ddc97', fg: '#06210f' }, { label: 'call.done.label', bubble: 'call.done.bubble' }),
@@ -81,6 +83,11 @@ export const G = {
   security: {},            // project key -> cached security report
   blocked: 0,              // cross-project attempts stopped by security
   firing: new Set(), defending: null,
+  viewFloor: 2, floorMenu: false,   // the floor the sidebar is browsing (may differ from the floor you stand on)
+  travel: new Map(),                // agent id -> { eta } : called from another floor, riding the lift to you
+  visitors: new Set(),              // agents from other floors that have arrived on your floor
+  summoned: new Set(),     // agents the human called over with the "Call" button
+  expanded: new Set(),     // sidebar project cards that are open
   lastData: null, frame: 0, follow: false,
   cam: { x: 0, z: -5, zoom: 0.8 },
 };

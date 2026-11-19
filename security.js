@@ -34,6 +34,7 @@ const mask = (s) => s.replace(/(['"])([^'"\s]{3})[^'"\s]{3,}(['"])/g, '$1$2â€¢â€
 async function scanSecurity(root) {
   const t0 = Date.now(), findings = [], counts = { high: 0, medium: 0, low: 0 };
   let scanned = 0, truncated = false, base;
+  if (!root) return { skipped: true, note: 'This agent tool does not report a project folder, so there is nothing to scan.', findings: [], counts, scannedFiles: 0, scannedAt: Date.now() };
   try { base = await fs.promises.realpath(root); } catch { return { error: 'folder-not-found', findings: [], counts, scannedFiles: 0 }; }
   if (base.toLowerCase() === HOME) return { skipped: true, note: "This folder is the user's Home folder, not a project, so it was not scanned.", findings: [], counts, scannedFiles: 0, scannedAt: Date.now() };
   const files = [], queue = [base]; let envFile = false, gitignoreHasEnv = null, pkgIssues = [];

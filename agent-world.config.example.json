@@ -1,0 +1,33 @@
+{
+  "_help": "Copy to agent-world.config.json (next to server.js) or to ~/.agent-world.json. Everything is optional; changes apply without a restart.",
+
+  "disable": ["copilot"],
+
+  "projectRoots": ["~/code", "~/projects"],
+
+  "adapters": [
+    {
+      "id": "mytool",
+      "name": "My Agent Tool",
+      "color": "#ff8800",
+      "files": "~/.mytool/sessions/**/*.jsonl",
+      "format": "jsonl",
+      "fields": {
+        "id": "session.id",
+        "cwd": "session.workingDirectory",
+        "title": "firstPrompt",
+        "time": "updatedAt"
+      }
+    },
+    {
+      "id": "glm-cli",
+      "name": "GLM CLI",
+      "color": "#3b5bdb",
+      "files": "%APPDATA%/glm/history/*.json",
+      "format": "json",
+      "fields": { "id": "id", "cwd": "cwd", "title": "title" },
+      "staticCwd": "",
+      "maxFiles": 300
+    }
+  ]
+}
