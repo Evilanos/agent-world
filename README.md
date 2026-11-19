@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/banner.png" alt="Agent World: a 2D virtual office for your AI coding agents" width="100%">
+</p>
+
 # Agent World
 
 **A 2D virtual office for your AI coding agents.**
@@ -274,6 +278,7 @@ history.js       Streams a transcript into an achievements outline
 security.js      Static security scanner
 chat.js          Headless Claude Code chat (resume / fork, streaming)
 public/
+  favicon.svg / .ico, apple-touch-icon.png, icon-512.png   Icons (the bot logo)
   index.html, style.css, main.js    UI shell, panels, data loop, lift, chat and fire flows
   js/core.js     Shared state, constants, outfit rules
   js/floor.js    Floor plan, furniture, collision boxes, walking routes
