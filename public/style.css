@@ -164,3 +164,8 @@ ol.plain li small { display: block; color: var(--muted); }
 .composer textarea { flex: 1; resize: none; background: rgba(255,255,255,.06); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font: inherit; }
 .composer textarea:focus-visible { outline: 2px solid var(--recent); }
 @media (max-width: 760px) { .chat, .detail:not([hidden]) ~ .chat { left: 12px; right: 12px; width: auto; bottom: 48px; } }
+
+/* narrower screens (typical laptops): the header wraps to two rows, so push the side panels down */
+@media (max-width: 1560px) and (min-width: 761px) {
+  .rooms, .detail { top: 108px; max-height: calc(100% - 160px); }
+}
