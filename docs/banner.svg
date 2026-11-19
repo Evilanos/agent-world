@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" role="img" aria-label="Agent World: a 2D virtual office for your AI coding agents">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#16213f"/><stop offset="1" stop-color="#0b0f1a"/></linearGradient>
+    <linearGradient id="ib" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1d2a4d"/><stop offset="1" stop-color="#0b0f1a"/></linearGradient>
+    <g id="bot">
+      <rect x="-1.5" y="-26" width="3" height="8" rx="1.5" fill="#9aa4b8"/><circle cx="0" cy="-27" r="3.6" fill="#ffb020"/>
+      <rect x="-19" y="-19" width="38" height="28" rx="8" fill="#e8edf7"/>
+      <rect x="-14" y="-13" width="28" height="15" rx="5" fill="#0f1730"/>
+      <rect x="-9.5" y="-9" width="6" height="6" rx="2" fill="#3ddc97"/><rect x="3.5" y="-9" width="6" height="6" rx="2" fill="#3ddc97"/>
+      <path d="M-14 24c0-6 3.5-9.5 8-9.5h12c4.5 0 8 3.5 8 9.5z" fill="currentColor"/>
+    </g>
+  </defs>
+  <rect width="1280" height="320" fill="url(#bg)"/>
+  <!-- floor grid -->
+  <g stroke="#ffffff" stroke-opacity=".035"><path d="M0 40H1280M0 80H1280M0 120H1280M0 160H1280M0 200H1280M0 240H1280M0 280H1280"/><path d="M40 0V320M80 0V320M120 0V320M160 0V320"/></g>
+
+  <!-- logo -->
+  <g transform="translate(70 80)">
+    <rect width="160" height="160" rx="36" fill="url(#ib)" stroke="#ffffff" stroke-opacity=".12" stroke-width="2"/>
+    <g transform="translate(80 84) scale(2.3)" color="#d97757"><use href="#bot"/></g>
+  </g>
+
+  <!-- wordmark -->
+  <text x="270" y="152" font-family="Segoe UI, system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="84" font-weight="800" fill="#f4f7ff" letter-spacing="-1.5">Agent World</text>
+  <text x="274" y="200" font-family="Segoe UI, system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="27" fill="#9aa4b8">A 2D virtual office for your AI coding agents</text>
+  <g font-family="Segoe UI, system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="18" font-weight="600">
+    <rect x="274" y="226" width="150" height="34" rx="17" fill="#3ddc97" fill-opacity=".14" stroke="#3ddc97" stroke-opacity=".55"/><text x="349" y="249" text-anchor="middle" fill="#3ddc97">100% local</text>
+    <rect x="436" y="226" width="190" height="34" rx="17" fill="#ffb020" fill-opacity=".14" stroke="#ffb020" stroke-opacity=".55"/><text x="531" y="249" text-anchor="middle" fill="#ffb020">zero dependencies</text>
+    <rect x="638" y="226" width="190" height="34" rx="17" fill="#4aa8ff" fill-opacity=".14" stroke="#4aa8ff" stroke-opacity=".55"/><text x="733" y="249" text-anchor="middle" fill="#4aa8ff">multi-agent aware</text>
+  </g>
+
+  <!-- three little rooms -->
+  <g transform="translate(900 52)">
+    <g>
+      <rect x="0" y="0" width="150" height="110" rx="10" fill="#3a8a55" fill-opacity=".35" stroke="#3ddc97" stroke-opacity=".7" stroke-width="3"/>
+      <rect x="18" y="62" width="40" height="14" rx="3" fill="#8a5a33"/><g transform="translate(38 46) scale(.62)" color="#4aa8ff"><use href="#bot"/></g>
+      <rect x="92" y="62" width="40" height="14" rx="3" fill="#8a5a33"/><g transform="translate(112 46) scale(.62)" color="#d97757"><use href="#bot"/></g>
+    </g>
+    <g transform="translate(170 0)">
+      <rect x="0" y="0" width="150" height="110" rx="10" fill="#a0306a" fill-opacity=".3" stroke="#ff5fa2" stroke-opacity=".7" stroke-width="3"/>
+      <rect x="55" y="62" width="40" height="14" rx="3" fill="#8a5a33"/><g transform="translate(75 46) scale(.62)" color="#3ddc97"><use href="#bot"/></g>
+    </g>
+    <g transform="translate(0 130)">
+      <rect x="0" y="0" width="150" height="110" rx="10" fill="#33668f" fill-opacity=".3" stroke="#4aa8ff" stroke-opacity=".7" stroke-width="3"/>
+      <g transform="translate(40 62) scale(.62)" color="#ffb020"><use href="#bot"/></g>
+      <g transform="translate(110 62) scale(.62)" color="#8b7cf6"><use href="#bot"/></g>
+      <rect x="60" y="86" width="30" height="8" rx="3" fill="#2d3a63"/>
+    </g>
+    <g transform="translate(170 130)">
+      <rect x="0" y="0" width="150" height="110" rx="10" fill="#8a6a33" fill-opacity=".3" stroke="#ffb020" stroke-opacity=".7" stroke-width="3"/>
+      <circle cx="75" cy="52" r="26" fill="#0f5c6e" fill-opacity=".8"/>
+      <g transform="translate(75 66) scale(.62)" color="#4aa8ff"><use href="#bot"/></g>
+    </g>
+  </g>
+</svg>

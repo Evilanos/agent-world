@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Agent World">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1d2a4d"/><stop offset="1" stop-color="#0b0f1a"/></linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- antenna -->
+  <rect x="30.5" y="8" width="3" height="8" rx="1.5" fill="#9aa4b8"/>
+  <circle cx="32" cy="8" r="4" fill="#ffb020"/>
+  <!-- head -->
+  <rect x="11" y="15" width="42" height="31" rx="9" fill="#e8edf7"/>
+  <rect x="7" y="25" width="5" height="11" rx="2.5" fill="#9aa4b8"/>
+  <rect x="52" y="25" width="5" height="11" rx="2.5" fill="#9aa4b8"/>
+  <!-- visor + eyes -->
+  <rect x="16" y="22" width="32" height="17" rx="6" fill="#0f1730"/>
+  <rect x="21" y="27" width="7" height="7" rx="2.5" fill="#3ddc97"/>
+  <rect x="36" y="27" width="7" height="7" rx="2.5" fill="#3ddc97"/>
+  <!-- shirt -->
+  <path d="M15 58c0-7 4-10.5 9-10.5h16c5 0 9 3.5 9 10.5z" fill="#d97757"/>
+</svg>
