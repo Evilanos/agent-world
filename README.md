@@ -110,6 +110,21 @@ It works by running the Claude Code CLI headlessly in the agent's folder (`claud
 - Limits: sessions larger than 100 MB are refused (too slow and expensive), a reply is capped at US$2 and 10 minutes, and you can press **Stop** at any time.
 - Only Claude Code agents can be chatted with.
 
+### Talking to Security (fix prompts)
+
+Click a guard (🛡) and press **💬 Ngobrol dengan Security** to chat with the security guard of that project. It knows the project's scan report and can:
+
+- explain and prioritize the findings;
+- **verify them by reading the code** (the scanner is a heuristic, so false positives are common; the guard will tell you which findings are real);
+- write a **ready-to-paste fix prompt** for the project's coding agent. Prompts appear in a code block with a **Copy** button and a **Send to agent…** button that opens that agent's chat with the prompt pre-filled (it is *not* sent automatically, so you can review it first; remember to enable edit mode for that agent if you want it to apply the fix).
+
+Details:
+
+- The guard is **read-only**: it only has the `Read`, `Grep` and `Glob` tools, and reads of `.env*`, `*.pem`, `*.key`, `id_rsa*` and `credentials*` are denied. It never changes files.
+- Security chats are **stateless**: no session is written to disk, so no extra agent appears in the office. The browser sends the recent conversation with each message and keeps the history in its own local storage.
+- Like agent chat, this **uses your Claude account** (a reply is capped at US$1 and 10 minutes). The code the guard reads and the scan snippets (with secret values masked) are sent to Claude through the `claude` CLI.
+- Only available for real project rooms (not the Fun Area guard, and not for your home folder).
+
 ## Is it safe?
 
 Short version: it reads your agent session files, shows them in your browser on your own machine, and only talks to the network if you use the chat.
@@ -119,7 +134,7 @@ Short version: it reads your agent session files, shows them in your browser on 
 - **Read-only by default.** It reads `~/.claude/sessions`, `~/.claude/projects` and the Antigravity history file. It never writes into them. The only things it writes are its own files in `data/` (the fired list and the chat/fork mapping).
 - **Write actions are guarded.** `POST` endpoints require a custom `X-AW` header and a matching `Origin`, so other websites you visit cannot trigger them.
 - **The browser cannot choose folders.** Project folders for the security scan, project summary and chat always come from the server's own scan, never from request parameters. Static files are served from `public/` only.
-- **What leaves your machine:** only what you type in a chat, sent to Anthropic through the `claude` CLI exactly as if you had typed it in a terminal.
+- **What leaves your machine:** only what you type in a chat (plus, for Security chats, the scan report and the code files the guard reads), sent to Anthropic through the `claude` CLI exactly as if you had typed it in a terminal. Nothing is sent unless you use a chat.
 - **Your data stays out of git.** `data/` is in `.gitignore`.
 
 ## Supported agents and platforms
@@ -186,7 +201,8 @@ An agent is "calling" you when its last assistant turn (within the last 30 minut
 | `GET /api/agent?id=` | Achievements outline of an agent |
 | `GET /api/security?key=[&force=1]` | Static security report of a project folder |
 | `GET /api/chat/info?id=` | Whether / how an agent can be chatted with |
-| `POST /api/chat` | Send a message, streams NDJSON events |
+| `POST /api/chat` | Send a message to an agent, streams NDJSON events |
+| `POST /api/chat/security` | Chat with a project's security guard (read-only, stateless), streams NDJSON events |
 | `POST /api/fire` / `POST /api/unfire` / `GET /api/fired` | Dismiss / restore agents |
 
 ### Project layout
@@ -224,7 +240,7 @@ Developer URL parameters (none of them send messages or change data by themselve
 | `?speed=N` | Time scale (up to 12) |
 | `?demo` | Preview agents walking over to you |
 | `?selftest=1` | Check that every walking route avoids walls and furniture |
-| `?select=NAME`, `?chat=NAME`, `?guard=N`, `?modal=security` | Open an agent panel, chat panel, guard panel or security report |
+| `?select=NAME`, `?chat=NAME`, `?guard=N`, `?guardchat=PROJECT`, `?modal=security` | Open an agent panel, agent chat, guard panel, a project's security chat (panel only) or a security report |
 
 ## License
 

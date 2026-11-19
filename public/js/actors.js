@@ -111,6 +111,11 @@ function planFrame(floor) {
   }
   // 5) security guards: stand guard, inspect the system console, block visitors, patrol the fun area
   for (const g of guards) {
+    if (G.chatWith === g.agent.id && userHere) {   // you are talking to this guard: it comes over
+      const fx = Math.sin(pl.yaw), fz = Math.cos(pl.yaw);
+      goals.set(g.agent.id, { key: 'user', follow: true, pos: P(pl.pos.x + fx * 1.9, pl.pos.z + fz * 1.9), yaw: pl.yaw + Math.PI, pose: 'chat', bubble: G.chatTyping ? '💭' : (G.chatBubble || '🛡') });
+      continue;
+    }
     if (g.roomKey === 'fun') {
       const mixed = groups.size >= 2, pts = fun.patrol, i = Math.floor(T / 9) % pts.length;
       goals.set(g.agent.id, { key: 'patrol' + i, pos: pts[i], yaw: i ? Math.PI : 0, pose: 'guard', bubble: mixed ? '👀 awasi lintas project' : '' });

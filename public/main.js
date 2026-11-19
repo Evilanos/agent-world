@@ -276,7 +276,7 @@ function selectGuard(g) {
     el('h3', { textContent: 'Tugas' }), el('ol', { className: 'plain' }, el('li', { textContent: 'Mencegah agent dari project yang berbeda mengobrol atau bekerja bersamaan.' }), el('li', { textContent: 'Memeriksa celah keamanan pada sistem yang dibangun di project ini.' })),
     el('h3', { textContent: 'Status' }), el('dl', {}, ...(key ? [el('dt', { textContent: 'Celah sistem' }), el('dd', { textContent: n ? `${n.high} tinggi · ${n.medium} sedang · ${n.low} rendah` : (rep && rep.skipped ? 'bukan project' : 'memindai…') })] : []),
       el('dt', { textContent: 'Lintas project dicegah' }), el('dd', { textContent: `${G.blocked}× (sesi ini)` })),
-    ...(key ? [el('div', { className: 'dangerzone' }, el('button', { type: 'button', className: 'primary', textContent: 'Buka laporan celah sistem', onclick: () => openSecurity(key) }))] : []));
+    ...(key ? [el('div', { className: 'dangerzone' }, el('div', { className: 'row' }, el('button', { type: 'button', className: 'primary', textContent: '💬 Ngobrol dengan Security', onclick: () => openChat(g) }), el('button', { type: 'button', textContent: 'Buka laporan celah sistem', onclick: () => openSecurity(key) })), el('p', { className: 'sub', textContent: 'Minta Security memverifikasi temuan dan membuatkan prompt perbaikan untuk dilempar ke agent project ini.' }))] : []));
 }
 
 // ---------- HUD ----------
@@ -339,6 +339,7 @@ async function refresh() {
         const wt = Number(P_.get('walktest')) || 0;
         if (wt) { for (let i = 0; i < 120; i++) { tAcc += 1 / 30; updateActors(G.floor, 1 / 30, tAcc); } G.actors.slice().sort((x, y) => y.agent.live - x.agent.live).slice(0, 4).forEach((a, i) => demo.set(a.agent.id, i % 2 ? 'done' : 'ask')); computeCalled(G.lastData); buildCurrentFloor(); sig = floorSig(); for (let i = 0; i < wt * 30; i++) { tAcc += 1 / 30; updateActors(G.floor, 1 / 30, tAcc); } }
         if (P_.has('selftest')) runSelfTest();
+        const gc = P_.get('guardchat'); if (gc) { const g = G.guards.find(x => (x.agent.projectName || '').includes(gc)); if (g) openChat(g); }   // opens the panel only; never sends anything
         const ch = P_.get('chat'); if (ch) { const a = G.actors.find(x => x.agent.name.includes(ch)); if (a) openChat(a); }   // opens the panel only; never sends anything
         if (P_.get('ride')) rideTo(Number(P_.get('ride')));
         const sel = P_.get('select'); if (sel) { const a = G.actors.find(x => x.agent.name.includes(sel)) || G.actors[0]; if (a) { selectAgent(a.agent.id); if (P_.has('fire')) { startFire(); if (P_.get('fire') === '2') loadAchv(a.agent.id, true); } } }

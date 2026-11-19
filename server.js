@@ -1,7 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { startChat, info: chatInfo, forkIds } = require('./chat');
+const { startChat, startSecurityChat, info: chatInfo, forkIds } = require('./chat');
 const { scan, projectSummary, setFired, setHidden, getTranscriptPath, findAgent } = require('./scan');
 const { agentHistory } = require('./history');
 const { securityReport, cached: securityCached } = require('./security');
@@ -117,6 +117,24 @@ function handle(req, res) {
       try { handle = startChat({ agent: hit.agent, message: b.message, mode: b.mode === 'edit' ? 'edit' : 'safe', branch: b.branch === true }, out, () => { setHidden(forkIds()); refresh(); res.end(); }); }
       catch (e) { out({ type: 'error', status: e.status || 500, message: e.message || String(e) }); return res.end(); }
       res.on('close', () => { if (!res.writableEnded) handle.stop(); });   // the browser aborted: stop the process
+    });
+    return;
+  }
+
+  if (pathname === '/api/chat/security' && req.method === 'POST') {   // talk to a project's security guard (read-only, stateless)
+    if (req.headers['x-aw'] !== '1' || (req.headers.origin && !ORIGINS.has(req.headers.origin))) return json(403, { error: 'forbidden' });
+    let body = ''; req.on('data', d => { body += d; if (body.length > 120000) req.destroy(); });
+    req.on('end', async () => {
+      let b; try { b = JSON.parse(body); } catch { return json(400, { error: 'bad json' }); }
+      const room = lastWorld && lastWorld.rooms.find(r => r.key === String(b.key || ''));
+      if (!room) return json(404, { error: 'project tidak ditemukan' });
+      let report = null; try { report = await securityReport(room.path, false); } catch { /* chat without a report */ }
+      res.writeHead(200, { ...SEC, 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' });
+      const out = (ev) => { try { res.write(JSON.stringify(ev) + String.fromCharCode(10)); } catch { /* client left */ } };
+      let handle;
+      try { handle = startSecurityChat({ room, report, message: b.message, history: b.history }, out, () => res.end()); }
+      catch (e) { out({ type: 'error', status: e.status || 500, message: e.message || String(e) }); return res.end(); }
+      res.on('close', () => { if (!res.writableEnded) handle.stop(); });
     });
     return;
   }
